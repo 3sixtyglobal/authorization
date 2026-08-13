@@ -1,0 +1,100 @@
+name: 'Package Deploy'
+description: 'Perform any operations that require some deployment tasks. See deploy-config.json.example for details on the structure of the input data.'
+
+inputs:
+  branch:
+    description: 'The branch the deployment is being performed on.'
+    required: true
+  branch-name:
+    description: 'The full name of the branch the deployment is being created in.'
+    required: true
+  deploy-config-json:
+    description: 'The configuration to use when deploying, stored as JSON.'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set IOTA CLI versions
+      shell: bash
+      run: |
+        echo "IOTA_CLI_VERSION_MAINNET=1.25.0" >> $GITHUB_ENV
+        echo "IOTA_CLI_VERSION_TESTNET=1.26.1-rc" >> $GITHUB_ENV
+        echo "IOTA_CLI_VERSION_DEVNET=1.26.0-beta" >> $GITHUB_ENV
+
+    - name: Download IOTA CLI mainnet
+      shell: bash
+      run: |
+        cd ..
+        wget https://github.com/iotaledger/iota/releases/download/v$IOTA_CLI_VERSION_MAINNET/iota-v$IOTA_CLI_VERSION_MAINNET-linux-x86_64.tgz -O iota-cli.tgz
+        tar xzf iota-cli.tgz
+        rm iota-cli.tgz
+        chmod +x iota
+        sudo mv iota /usr/local/bin/iota
+        iota --version
+
+    - name: Setup Verifiable Storage contracts for mainnet
+      shell: bash
+      run: |
+        cd packages/verifiable-storage-connector-iota
+        export DEPLOYER_MNEMONIC=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.mainnet.mnemonic')
+        export RPC_URL=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.mainnet.nodeUrl')
+        export NETWORK=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.mainnet.network')
+        export ADDRESS_INDEX=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.mainnet.addressIndex // 0')
+        export GAS_BUDGET=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.mainnet.gasBudget // 100000000')
+        export RPC_TIMEOUT=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.mainnet.rpcTimeout // 60000')
+        export CONFIRMATION_TIMEOUT=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.mainnet.confirmationTimeout // 120')
+        ../../node_modules/.bin/move-to-json build "src/contracts/**/*.move" --output src/contracts/smartContractDeployments/smart-contract-deployments.json
+        ../../node_modules/.bin/move-to-json deploy --contracts src/contracts/smartContractDeployments/smart-contract-deployments.json
+
+    - name: Download IOTA CLI testnet
+      shell: bash
+      run: |
+        cd ..
+        wget https://github.com/iotaledger/iota/releases/download/v$IOTA_CLI_VERSION_TESTNET/iota-v$IOTA_CLI_VERSION_TESTNET-linux-x86_64.tgz -O iota-cli.tgz
+        tar xzf iota-cli.tgz
+        rm iota-cli.tgz
+        chmod +x iota
+        sudo mv iota /usr/local/bin/iota
+        iota --version
+
+    - name: Setup Verifiable Storage contracts for testnet
+      shell: bash
+      run: |
+        cd packages/verifiable-storage-connector-iota
+        export DEPLOYER_MNEMONIC=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.testnet.mnemonic')
+        export RPC_URL=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.testnet.nodeUrl')
+        export NETWORK=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.testnet.network')
+        export ADDRESS_INDEX=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.testnet.addressIndex // 0')
+        export GAS_BUDGET=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.testnet.gasBudget // 50000000')
+        export RPC_TIMEOUT=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.testnet.rpcTimeout // 60000')
+        export CONFIRMATION_TIMEOUT=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.testnet.confirmationTimeout // 60')
+        export FAUCET_URL=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.testnet.faucetUrl // "https://faucet.testnet.iota.cafe"')
+        ../../node_modules/.bin/move-to-json build "src/contracts/**/*.move" --output src/contracts/smartContractDeployments/smart-contract-deployments.json
+        ../../node_modules/.bin/move-to-json deploy --contracts src/contracts/smartContractDeployments/smart-contract-deployments.json
+
+    - name: Download IOTA CLI devnet
+      shell: bash
+      run: |
+        cd ..
+        wget https://github.com/iotaledger/iota/releases/download/v$IOTA_CLI_VERSION_DEVNET/iota-v$IOTA_CLI_VERSION_DEVNET-linux-x86_64.tgz -O iota-cli.tgz
+        tar xzf iota-cli.tgz
+        rm iota-cli.tgz
+        chmod +x iota
+        sudo mv iota /usr/local/bin/iota
+        iota --version
+
+    - name: Setup Verifiable Storage contracts for devnet
+      shell: bash
+      run: |
+        cd packages/verifiable-storage-connector-iota
+        export DEPLOYER_MNEMONIC=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.devnet.mnemonic')
+        export RPC_URL=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.devnet.nodeUrl')
+        export NETWORK=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.devnet.network')
+        export ADDRESS_INDEX=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.devnet.addressIndex // 0')
+        export GAS_BUDGET=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.devnet.gasBudget // 50000000')
+        export RPC_TIMEOUT=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.devnet.rpcTimeout // 60000')
+        export CONFIRMATION_TIMEOUT=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.devnet.confirmationTimeout // 60')
+        export FAUCET_URL=$(echo '${{ inputs.deploy-config-json }}' | jq -r '.devnet.faucetUrl // "https://faucet.devnet.iota.cafe"')
+        ../../node_modules/.bin/move-to-json build "src/contracts/**/*.move" --output src/contracts/smartContractDeployments/smart-contract-deployments.json
+        ../../node_modules/.bin/move-to-json deploy --contracts src/contracts/smartContractDeployments/smart-contract-deployments.json

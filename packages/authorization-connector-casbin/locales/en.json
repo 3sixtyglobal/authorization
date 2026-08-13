@@ -1,0 +1,28 @@
+{
+	"info": {
+		"casbinAuthorizationConnector": {
+			"casbinConnected": "Connected to Casbin server at \"{address}\"."
+		}
+	},
+	"error": {
+		"casbinAuthorizationConnector": {
+			"casbinConnectionFailed": "Failed to connect to Casbin server at \"{address}\".",
+			"invalidEnforcerId": "The enforcer ID \"{enforcerId}\" must be in 'owner/name' format.",
+			"checkFailed": "Failed to check authorization for subject \"{subject}\" on object \"{object}\" with action \"{action}\".",
+			"addPolicyFailed": "Failed to add authorization policy for subject \"{subject}\".",
+			"removePolicyFailed": "Failed to remove authorization policy for subject \"{subject}\".",
+			"getAllPoliciesFailed": "Failed to retrieve all authorization policies.",
+			"getAllRolesFailed": "Failed to retrieve all authorization roles.",
+			"addRoleForSubjectFailed": "Failed to add role \"{role}\" for subject \"{subject}\".",
+			"removeRoleForSubjectFailed": "Failed to remove role \"{role}\" from subject \"{subject}\".",
+			"removeAllRolesForSubjectFailed": "Failed to remove all roles from subject \"{subject}\".",
+			"getRolesForSubjectFailed": "Failed to retrieve roles for subject \"{subject}\".",
+			"getSubjectsForRoleFailed": "Failed to retrieve subjects for role \"{role}\".",
+			"hasRoleForSubjectFailed": "Failed to check role \"{role}\" for subject \"{subject}\".",
+			"addRoleInheritanceFailed": "Failed to add inheritance from role \"{parentRole}\" to role \"{role}\".",
+			"removeRoleInheritanceFailed": "Failed to remove inheritance from role \"{parentRole}\" from role \"{role}\".",
+			"getParentRolesFailed": "Failed to retrieve parent roles for role \"{role}\".",
+			"getChildRolesFailed": "Failed to retrieve child roles for role \"{role}\"."
+		}
+	}
+}

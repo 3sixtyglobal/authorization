@@ -1,0 +1,1975 @@
+{
+	"openapi": "3.1.1",
+	"info": {
+		"title": "TWIN - Test Endpoints",
+		"description": "REST API for TWIN - Test Endpoints.",
+		"version": "1.0.0",
+		"license": {
+			"name": "Apache 2.0 License",
+			"url": "https://opensource.org/licenses/Apache-2.0"
+		}
+	},
+	"servers": [
+		{
+			"url": "https://localhost"
+		}
+	],
+	"tags": [
+		{
+			"name": "Authorization",
+			"description": "Endpoints which are modelled to access an authorization service."
+		}
+	],
+	"paths": {
+		"/authorization/check": {
+			"post": {
+				"operationId": "authorizationCheck",
+				"summary": "Check an authorization policy",
+				"tags": [
+					"Authorization"
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"requestBody": {
+					"description": "Request to check an authorization policy.",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/AuthorizationCheckRequest"
+							},
+							"examples": {
+								"authorizationCheckExample": {
+									"value": {
+										"subject": "user1",
+										"object": "/data",
+										"action": "read"
+									}
+								}
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Response for checking an authorization policy.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AuthorizationCheckResponse"
+								},
+								"examples": {
+									"authorizationCheckResponseExample": {
+										"value": {
+											"allowed": true
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/authorization/policy": {
+			"post": {
+				"operationId": "authorizationAddPolicy",
+				"summary": "Add an authorization policy",
+				"tags": [
+					"Authorization"
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"requestBody": {
+					"description": "Request to add an authorization policy.",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/AuthorizationPolicy"
+							},
+							"examples": {
+								"authorizationAddPolicyExample": {
+									"value": {
+										"subject": "user1",
+										"object": "/data",
+										"action": "read"
+									}
+								}
+							}
+						}
+					}
+				},
+				"responses": {
+					"204": {
+						"description": "The rest request ended in success with no data."
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			},
+			"get": {
+				"operationId": "authorizationGetAllPolicies",
+				"summary": "Get all authorization policies",
+				"tags": [
+					"Authorization"
+				],
+				"parameters": [
+					{
+						"name": "subject",
+						"description": "Filter policies by subject.",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"example": "user1"
+					},
+					{
+						"name": "cursor",
+						"description": "The cursor to request the next chunk of results.",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "limit",
+						"description": "Limit the number of entities to return.",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"example": "20"
+					}
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Response for getting all authorization policies.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AuthorizationGetAllPoliciesResponse"
+								},
+								"examples": {
+									"authorizationGetAllPoliciesResponseExample": {
+										"value": {
+											"entities": [
+												{
+													"subject": "user1",
+													"object": "/data",
+													"action": "read"
+												}
+											]
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/authorization/policy/remove": {
+			"post": {
+				"operationId": "authorizationRemovePolicy",
+				"summary": "Remove an authorization policy",
+				"tags": [
+					"Authorization"
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"requestBody": {
+					"description": "Request to remove an authorization policy.",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/AuthorizationPolicy"
+							},
+							"examples": {
+								"authorizationRemovePolicyExample": {
+									"value": {
+										"subject": "user1",
+										"object": "/data",
+										"action": "read"
+									}
+								}
+							}
+						}
+					}
+				},
+				"responses": {
+					"204": {
+						"description": "The rest request ended in success with no data."
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/authorization/roles": {
+			"get": {
+				"operationId": "authorizationGetAllRoles",
+				"summary": "Get all authorization roles",
+				"tags": [
+					"Authorization"
+				],
+				"parameters": [
+					{
+						"name": "cursor",
+						"description": "The cursor to request the next chunk of results.",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "limit",
+						"description": "Limit the number of roles to return.",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"example": "20"
+					}
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Response for getting all authorization roles.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AuthorizationGetAllRolesResponse"
+								},
+								"examples": {
+									"authorizationGetAllRolesResponseExample": {
+										"value": {
+											"roles": [
+												"admin",
+												"editor",
+												"viewer"
+											]
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/authorization/policy/{subject}": {
+			"get": {
+				"operationId": "authorizationGetPoliciesForSubject",
+				"summary": "Get authorization policies for a subject",
+				"tags": [
+					"Authorization"
+				],
+				"parameters": [
+					{
+						"name": "subject",
+						"description": "The subject to get policies for.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "user1"
+					}
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Response for getting authorization policies for a subject.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AuthorizationGetPoliciesForSubjectResponse"
+								},
+								"examples": {
+									"authorizationGetPoliciesForSubjectResponseExample": {
+										"value": {
+											"policies": [
+												{
+													"subject": "user1",
+													"object": "/data",
+													"action": "read"
+												}
+											]
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/authorization/subject/{subject}/role": {
+			"post": {
+				"operationId": "authorizationAddRoleForSubject",
+				"summary": "Add a role for a subject",
+				"tags": [
+					"Authorization"
+				],
+				"parameters": [
+					{
+						"name": "subject",
+						"description": "The subject to add the role to.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "user1"
+					}
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"requestBody": {
+					"description": "Request to add a role for a subject.",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/AuthorizationAddRoleForSubjectRequest"
+							},
+							"examples": {
+								"authorizationAddRoleForSubjectExample": {
+									"value": {
+										"role": "admin"
+									}
+								}
+							}
+						}
+					}
+				},
+				"responses": {
+					"204": {
+						"description": "The rest request ended in success with no data."
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/authorization/subject/{subject}/role/{role}": {
+			"delete": {
+				"operationId": "authorizationRemoveRoleForSubject",
+				"summary": "Remove a role for a subject",
+				"tags": [
+					"Authorization"
+				],
+				"parameters": [
+					{
+						"name": "subject",
+						"description": "The subject to remove the role from.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "user1"
+					},
+					{
+						"name": "role",
+						"description": "The role to remove.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "admin"
+					}
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"responses": {
+					"204": {
+						"description": "The rest request ended in success with no data."
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			},
+			"get": {
+				"operationId": "authorizationHasRoleForSubject",
+				"summary": "Check if a subject has a role",
+				"tags": [
+					"Authorization"
+				],
+				"parameters": [
+					{
+						"name": "subject",
+						"description": "The subject to check.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "user1"
+					},
+					{
+						"name": "role",
+						"description": "The role to check.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "admin"
+					}
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Response for checking if a subject has a role.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AuthorizationHasRoleForSubjectResponse"
+								},
+								"examples": {
+									"authorizationHasRoleForSubjectResponseExample": {
+										"value": {
+											"hasRole": true
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/authorization/subject/{subject}/roles": {
+			"delete": {
+				"operationId": "authorizationRemoveAllRolesForSubject",
+				"summary": "Remove all roles for a subject",
+				"tags": [
+					"Authorization"
+				],
+				"parameters": [
+					{
+						"name": "subject",
+						"description": "The subject to remove all roles from.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "user1"
+					}
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"responses": {
+					"204": {
+						"description": "The rest request ended in success with no data."
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			},
+			"get": {
+				"operationId": "authorizationGetRolesForSubject",
+				"summary": "Get roles for a subject",
+				"tags": [
+					"Authorization"
+				],
+				"parameters": [
+					{
+						"name": "subject",
+						"description": "The subject to get roles for.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "user1"
+					}
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Response for getting roles for a subject.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AuthorizationGetRolesForSubjectResponse"
+								},
+								"examples": {
+									"authorizationGetRolesForSubjectResponseExample": {
+										"value": {
+											"roles": [
+												"admin",
+												"editor"
+											]
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/authorization/role/{role}/subjects": {
+			"get": {
+				"operationId": "authorizationGetSubjectsForRole",
+				"summary": "Get subjects for a role",
+				"tags": [
+					"Authorization"
+				],
+				"parameters": [
+					{
+						"name": "role",
+						"description": "The role to get subjects for.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "admin"
+					}
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Response for getting subjects for a role.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AuthorizationGetSubjectsForRoleResponse"
+								},
+								"examples": {
+									"authorizationGetSubjectsForRoleResponseExample": {
+										"value": {
+											"subjects": [
+												"user1",
+												"user2"
+											]
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/authorization/role/{role}/inherit": {
+			"post": {
+				"operationId": "authorizationAddRoleInheritance",
+				"summary": "Add a role inheritance",
+				"tags": [
+					"Authorization"
+				],
+				"parameters": [
+					{
+						"name": "role",
+						"description": "The role to add the inheritance to.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "editor"
+					}
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"requestBody": {
+					"description": "Request to add a role inheritance.",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/AuthorizationAddRoleInheritanceRequest"
+							},
+							"examples": {
+								"authorizationAddRoleInheritanceExample": {
+									"value": {
+										"parentRole": "viewer"
+									}
+								}
+							}
+						}
+					}
+				},
+				"responses": {
+					"204": {
+						"description": "The rest request ended in success with no data."
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/authorization/role/{role}/inherit/{parentRole}": {
+			"delete": {
+				"operationId": "authorizationRemoveRoleInheritance",
+				"summary": "Remove a role inheritance",
+				"tags": [
+					"Authorization"
+				],
+				"parameters": [
+					{
+						"name": "role",
+						"description": "The role to remove the inheritance from.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "editor"
+					},
+					{
+						"name": "parentRole",
+						"description": "The parent role to remove.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "viewer"
+					}
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"responses": {
+					"204": {
+						"description": "The rest request ended in success with no data."
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/authorization/role/{role}/parents": {
+			"get": {
+				"operationId": "authorizationGetParentRoles",
+				"summary": "Get parent roles for a role",
+				"tags": [
+					"Authorization"
+				],
+				"parameters": [
+					{
+						"name": "role",
+						"description": "The role to get parent roles for.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "editor"
+					}
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Response for getting parent roles for a role.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AuthorizationGetParentRolesResponse"
+								},
+								"examples": {
+									"authorizationGetParentRolesResponseExample": {
+										"value": {
+											"roles": [
+												"viewer"
+											]
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/authorization/role/{role}/children": {
+			"get": {
+				"operationId": "authorizationGetChildRoles",
+				"summary": "Get child roles for a role",
+				"tags": [
+					"Authorization"
+				],
+				"parameters": [
+					{
+						"name": "role",
+						"description": "The role to get child roles for.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "admin"
+					}
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "Response for getting child roles for a role.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AuthorizationGetChildRolesResponse"
+								},
+								"examples": {
+									"authorizationGetChildRolesResponseExample": {
+										"value": {
+											"roles": [
+												"editor",
+												"viewer"
+											]
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	},
+	"components": {
+		"schemas": {
+			"AuthorizationAddRoleForSubjectRequest": {
+				"type": "object",
+				"properties": {
+					"role": {
+						"type": "string",
+						"description": "The role to add."
+					}
+				},
+				"required": [
+					"role"
+				],
+				"description": "The request data."
+			},
+			"AuthorizationAddRoleInheritanceRequest": {
+				"type": "object",
+				"properties": {
+					"parentRole": {
+						"type": "string",
+						"description": "The parent role to inherit from."
+					}
+				},
+				"required": [
+					"parentRole"
+				],
+				"description": "The request data."
+			},
+			"AuthorizationCheckRequest": {
+				"type": "object",
+				"properties": {
+					"subject": {
+						"type": "string",
+						"description": "The subject to check."
+					},
+					"object": {
+						"type": "string",
+						"description": "The object to check."
+					},
+					"action": {
+						"type": "string",
+						"description": "The action to check."
+					}
+				},
+				"required": [
+					"subject",
+					"object",
+					"action"
+				],
+				"description": "The request data."
+			},
+			"AuthorizationCheckResponse": {
+				"type": "object",
+				"properties": {
+					"allowed": {
+						"type": "boolean",
+						"description": "Whether the subject is allowed to perform the action on the object."
+					}
+				},
+				"required": [
+					"allowed"
+				],
+				"description": "The response body."
+			},
+			"AuthorizationGetAllPoliciesResponse": {
+				"type": "object",
+				"properties": {
+					"entities": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/AuthorizationPolicy"
+						},
+						"description": "The list of policies."
+					},
+					"cursor": {
+						"type": "string",
+						"description": "An optional cursor, when defined can be used to retrieve the next chunk of results."
+					}
+				},
+				"required": [
+					"entities"
+				],
+				"description": "The response body."
+			},
+			"AuthorizationGetAllRolesResponse": {
+				"type": "object",
+				"properties": {
+					"roles": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "The list of role names."
+					},
+					"cursor": {
+						"type": "string",
+						"description": "An optional cursor, when defined can be used to retrieve the next chunk of results."
+					}
+				},
+				"required": [
+					"roles"
+				],
+				"description": "The response body."
+			},
+			"AuthorizationGetChildRolesResponse": {
+				"type": "object",
+				"properties": {
+					"roles": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "The list of child roles."
+					}
+				},
+				"required": [
+					"roles"
+				],
+				"description": "The response body."
+			},
+			"AuthorizationGetParentRolesResponse": {
+				"type": "object",
+				"properties": {
+					"roles": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "The list of parent roles."
+					}
+				},
+				"required": [
+					"roles"
+				],
+				"description": "The response body."
+			},
+			"AuthorizationGetPoliciesForSubjectResponse": {
+				"type": "object",
+				"properties": {
+					"policies": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/AuthorizationPolicy"
+						},
+						"description": "The list of policies for the subject."
+					}
+				},
+				"required": [
+					"policies"
+				],
+				"description": "The response body."
+			},
+			"AuthorizationGetRolesForSubjectResponse": {
+				"type": "object",
+				"properties": {
+					"roles": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "The list of roles for the subject."
+					}
+				},
+				"required": [
+					"roles"
+				],
+				"description": "The response body."
+			},
+			"AuthorizationGetSubjectsForRoleResponse": {
+				"type": "object",
+				"properties": {
+					"subjects": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "The list of subjects assigned to the role."
+					}
+				},
+				"required": [
+					"subjects"
+				],
+				"description": "The response body."
+			},
+			"AuthorizationHasRoleForSubjectResponse": {
+				"type": "object",
+				"properties": {
+					"hasRole": {
+						"type": "boolean",
+						"description": "Whether the subject has the role."
+					}
+				},
+				"required": [
+					"hasRole"
+				],
+				"description": "The response body."
+			},
+			"AuthorizationPolicy": {
+				"description": "Defines a single authorization policy rule binding a subject, object, and action.",
+				"type": "object",
+				"properties": {
+					"subject": {
+						"type": "string",
+						"description": "The subject (user, service, or role) the policy applies to."
+					},
+					"object": {
+						"type": "string",
+						"description": "The object the policy applies to."
+					},
+					"action": {
+						"type": "string",
+						"description": "The action the policy controls."
+					}
+				},
+				"required": [
+					"subject",
+					"object",
+					"action"
+				]
+			},
+			"Error": {
+				"description": "Model to describe serialized error.",
+				"type": "object",
+				"properties": {
+					"name": {
+						"type": "string",
+						"description": "The name for the error."
+					},
+					"message": {
+						"type": "string",
+						"description": "The message for the error as an i18n key."
+					},
+					"source": {
+						"type": "string",
+						"description": "The source of the error."
+					},
+					"properties": {
+						"type": "object",
+						"additionalProperties": {},
+						"description": "Any additional information for the error."
+					},
+					"stack": {
+						"type": "string",
+						"description": "The stack trace for the error."
+					},
+					"cause": {
+						"$ref": "#/components/schemas/Error"
+					}
+				},
+				"required": [
+					"name",
+					"message"
+				]
+			}
+		},
+		"securitySchemes": {
+			"jwtBearerAuthScheme": {
+				"type": "http",
+				"scheme": "bearer",
+				"bearerFormat": "JWT"
+			}
+		}
+	}
+}

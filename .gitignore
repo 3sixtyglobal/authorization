@@ -1,0 +1,22 @@
+node_modules
+.eslintcache
+.updatable-packages
+**/dist/es
+**/dist/types
+**/dist/locales
+coverage
+*.tgz
+**/.tmp
+.env.dev
+devnet.env
+mainnet.env
+testnet.env
+vitest.config.ts.timestamp*
+.DS_Store
+
+# Move contract build artifacts
+**/build/
+**/Move.lock
+**/Move.toml.copy
+**/.coverage/
+**/.trace/

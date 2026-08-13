@@ -1,0 +1,33 @@
+// Copyright 2026 IOTA Stiftung.
+// SPDX-License-Identifier: Apache-2.0.
+import { entity, property } from "@twin.org/entity";
+
+/**
+ * Class describing an authorization policy entity stored in entity storage.
+ */
+@entity()
+export class AuthorizationPolicy {
+	/**
+	 * The compound identifier for this policy rule, in "subject|object|action" format.
+	 */
+	@property({ type: "string", isPrimary: true })
+	public id!: string;
+
+	/**
+	 * The subject (user, service, or role) the policy applies to.
+	 */
+	@property({ type: "string" })
+	public subject!: string;
+
+	/**
+	 * The object the authorization policy applies to.
+	 */
+	@property({ type: "string" })
+	public object!: string;
+
+	/**
+	 * The action the authorization policy allows.
+	 */
+	@property({ type: "string" })
+	public action!: string;
+}

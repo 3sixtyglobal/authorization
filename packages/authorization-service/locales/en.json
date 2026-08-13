@@ -1,0 +1,23 @@
+{
+	"error": {
+		"authorizationService": {
+			"noConnectors": "There are no connectors registered with the authorization factory",
+			"checkFailed": "The authorization check failed",
+			"addPolicyFailed": "The addition of the policy failed",
+			"removePolicyFailed": "The removal of the policy failed",
+			"getPoliciesForSubjectFailed": "The retrieval of policies for the subject failed",
+			"getAllPoliciesFailed": "The retrieval of all policies failed",
+			"getAllRolesFailed": "The retrieval of all roles failed",
+			"addRoleForSubjectFailed": "The assignment of the role to the subject failed",
+			"removeRoleForSubjectFailed": "The removal of the role from the subject failed",
+			"removeAllRolesForSubjectFailed": "The removal of all roles from the subject failed",
+			"getRolesForSubjectFailed": "The retrieval of roles for the subject failed",
+			"getSubjectsForRoleFailed": "The retrieval of subjects for the role failed",
+			"hasRoleForSubjectFailed": "The check for the role on the subject failed",
+			"addRoleInheritanceFailed": "The addition of the role inheritance failed",
+			"removeRoleInheritanceFailed": "The removal of the role inheritance failed",
+			"getParentRolesFailed": "The retrieval of parent roles failed",
+			"getChildRolesFailed": "The retrieval of child roles failed"
+		}
+	}
+}

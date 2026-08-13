@@ -1,0 +1,619 @@
+{
+	"openapi": "3.1.1",
+	"info": {
+		"title": "TWIN - Test Endpoints",
+		"description": "REST API for TWIN - Test Endpoints.",
+		"version": "1.0.0",
+		"license": {
+			"name": "Apache 2.0 License",
+			"url": "https://opensource.org/licenses/Apache-2.0"
+		}
+	},
+	"servers": [
+		{
+			"url": "https://localhost"
+		}
+	],
+	"tags": [
+		{
+			"name": "VerifiableStorage",
+			"description": "Endpoints which are modelled to access a verifiable storage."
+		}
+	],
+	"paths": {
+		"/verifiable": {
+			"post": {
+				"operationId": "verifiableStorageCreate",
+				"summary": "Create an item in verifiable storage",
+				"tags": [
+					"VerifiableStorage"
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"requestBody": {
+					"description": "Store the data and return the verifiable storage item id.",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/VerifiableStorageCreateRequest"
+							},
+							"examples": {
+								"verifiableStorageCreateRequestExample": {
+									"value": {
+										"data": "SGVsbG8gd29ybGQ="
+									}
+								}
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Response to storing the verifiable storage item.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/VerifiableStorageCreateResponse"
+								},
+								"examples": {
+									"verifiableStorageCreateResponseExample": {
+										"value": {
+											"receipt": {
+												"@context": "https://schema.twindev.org/verifiable-storage/",
+												"type": "VerifiableStorageIotaReceipt2026"
+											},
+											"id": "verifiable:iota:aW90YS1uZnQ6dHN0OjB4NzYyYjljNDllYTg2OWUwZWJkYTliYmZhNzY5Mzk0NDdhNDI4ZGNmMTc4YzVkMTVhYjQ0N2UyZDRmYmJiNGViMg=="
+										}
+									}
+								}
+							}
+						},
+						"headers": {
+							"location": {
+								"schema": {
+									"type": "string"
+								},
+								"description": "e.g. verifiable:iota:aW90YS1uZnQ6dHN0OjB4NzYyYjljNDllYTg2OWUwZWJkYTliYmZhNzY5Mzk0NDdhNDI4ZGNmMTc4YzVkMTVhYjQ0N2UyZDRmYmJiNGViMg=="
+							}
+						}
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/verifiable/{id}": {
+			"put": {
+				"operationId": "verifiableStorageUpdate",
+				"summary": "Update an item in verifiable storage",
+				"tags": [
+					"VerifiableStorage"
+				],
+				"parameters": [
+					{
+						"name": "id",
+						"description": "The id of the verifiable storage item to update.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "verifiable:iota:aW90YS1uZnQ6dHN0OjB4NzYyYjljNDllYTg2OWUwZWJkYTliYmZhNzY5Mzk0NDdhNDI4ZGNmMTc4YzVkMTVhYjQ0N2UyZDRmYmJiNGViMg=="
+					}
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"requestBody": {
+					"description": "Update the data and return the receipt.",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/VerifiableStorageUpdateRequest"
+							},
+							"examples": {
+								"verifiableStorageUpdateRequestExample": {
+									"value": {
+										"data": "SGVsbG8gd29ybGQ="
+									}
+								}
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Response to updating the verifiable storage item.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "https://schema.twindev.org/json-ld/JsonLdNodeObject"
+								},
+								"examples": {
+									"verifiableStorageUpdateResponseExample": {
+										"value": {
+											"@context": "https://schema.twindev.org/verifiable-storage/",
+											"type": "VerifiableStorageIotaReceipt2026"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			},
+			"get": {
+				"operationId": "verifiableStorageGet",
+				"summary": "Get an verifiable storage item",
+				"tags": [
+					"VerifiableStorage"
+				],
+				"parameters": [
+					{
+						"name": "id",
+						"description": "The id of the verifiable storage item to resolve.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "verifiable:iota:aW90YS1uZnQ6dHN0OjB4NzYyYjljNDllYTg2OWUwZWJkYTliYmZhNzY5Mzk0NDdhNDI4ZGNmMTc4YzVkMTVhYjQ0N2UyZDRmYmJiNGViMg=="
+					}
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"requestBody": {
+					"description": "Get the verifiable storage item.",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/VerifiableStorageGetRequest"
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Response to getting the verifiable storage item.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/VerifiableStorageGetResponse"
+								},
+								"examples": {
+									"verifiableStorageGetResponseExample": {
+										"value": {
+											"data": "SGVsbG8gd29ybGQ=",
+											"receipt": {
+												"@context": "https://www.w3.org/ns/activitystreams",
+												"type": "Create",
+												"actor": "https://example.org/actor",
+												"object": "https://example.org/object"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"operationId": "verifiableStorageRemove",
+				"summary": "Remove an item from verifiable storage",
+				"tags": [
+					"VerifiableStorage"
+				],
+				"parameters": [
+					{
+						"name": "id",
+						"description": "The id of the verifiable storage item to remove.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "verifiable:iota:aW90YS1uZnQ6dHN0OjB4NzYyYjljNDllYTg2OWUwZWJkYTliYmZhNzY5Mzk0NDdhNDI4ZGNmMTc4YzVkMTVhYjQ0N2UyZDRmYmJiNGViMg=="
+					}
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"responses": {
+					"204": {
+						"description": "The rest request ended in success with no data."
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	},
+	"components": {
+		"schemas": {
+			"Error": {
+				"description": "Model to describe serialized error.",
+				"type": "object",
+				"properties": {
+					"name": {
+						"type": "string",
+						"description": "The name for the error."
+					},
+					"message": {
+						"type": "string",
+						"description": "The message for the error as an i18n key."
+					},
+					"source": {
+						"type": "string",
+						"description": "The source of the error."
+					},
+					"properties": {
+						"type": "object",
+						"additionalProperties": {},
+						"description": "Any additional information for the error."
+					},
+					"stack": {
+						"type": "string",
+						"description": "The stack trace for the error."
+					},
+					"cause": {
+						"$ref": "#/components/schemas/Error"
+					}
+				},
+				"required": [
+					"name",
+					"message"
+				]
+			},
+			"VerifiableStorageCreateRequest": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"type": "string",
+						"description": "The data for the verifiable storage item, this is a string serialized as base64."
+					},
+					"allowList": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "The list of identities that are allowed to modify the item."
+					},
+					"maxAllowListSize": {
+						"type": "number",
+						"description": "The maximum size of the allow list.",
+						"default": 100
+					},
+					"namespace": {
+						"type": "string",
+						"description": "The namespace of the connector to use for the verifiable storage item, defaults to component configured namespace."
+					}
+				},
+				"required": [
+					"data"
+				],
+				"description": "The data to be stored."
+			},
+			"VerifiableStorageCreateResponse": {
+				"type": "object",
+				"properties": {
+					"receipt": {
+						"$ref": "https://schema.twindev.org/json-ld/JsonLdNodeObject"
+					},
+					"id": {
+						"type": "string",
+						"description": "The id of the verifiable storage item."
+					}
+				},
+				"required": [
+					"receipt",
+					"id"
+				],
+				"description": "The created verifiable storage item details."
+			},
+			"VerifiableStorageGetRequest": {
+				"type": "object",
+				"properties": {
+					"includeData": {
+						"type": "boolean",
+						"description": "The flag to include the data.",
+						"default": true
+					},
+					"includeAllowList": {
+						"type": "boolean",
+						"description": "The flag to include the allow list.",
+						"default": true
+					}
+				},
+				"description": "The body optional param."
+			},
+			"VerifiableStorageGetResponse": {
+				"type": "object",
+				"properties": {
+					"receipt": {
+						"$ref": "https://schema.twindev.org/json-ld/JsonLdNodeObject"
+					},
+					"data": {
+						"type": "string",
+						"description": "The data of the verifiable storage item, this is a string serialized as base64."
+					},
+					"allowList": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "The list of identities that are allowed to modify the item."
+					}
+				},
+				"required": [
+					"receipt"
+				],
+				"description": "The retrieved verifiable storage item contents."
+			},
+			"VerifiableStorageUpdateRequest": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"type": "string",
+						"description": "The data which is a string serialized as base64, leave empty if just updating the allow list."
+					},
+					"allowList": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "An updated list of identities that are allowed to modify the item, send an empty list to remove all entries."
+					}
+				},
+				"description": "The data to be updated."
+			}
+		},
+		"securitySchemes": {
+			"jwtBearerAuthScheme": {
+				"type": "http",
+				"scheme": "bearer",
+				"bearerFormat": "JWT"
+			}
+		}
+	}
+}

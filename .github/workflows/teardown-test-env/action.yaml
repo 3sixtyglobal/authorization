@@ -1,0 +1,14 @@
+name: 'Teardown Testing Environment'
+description: 'Stop and remove test environment services after workflow completion.'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Teardown Docker Test Environment
+      shell: bash
+      run: |
+        docker ps -aq | xargs -r docker stop
+        docker ps -aq | xargs -r docker rm
+        docker images -aq | xargs -r docker rmi -f
+        docker system prune -a --volumes -f || true
+        sudo rm -f /usr/local/bin/iota 2>/dev/null || true

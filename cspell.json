@@ -1,0 +1,43 @@
+{
+	"language": "en-GB",
+	"ignorePaths": [
+		"**/node_modules/**",
+		"LICENSE",
+		"**/coverage/**",
+		"**/dist/**",
+		"**/docs/reference/**",
+		"**/docs/open-api/**",
+		"**/tests/**",
+		"*.yaml",
+		"package.json",
+		"vitest.config.*",
+		"tsconfig.json",
+		"tsconfig.eslint.json",
+		"typedoc.json",
+		"eslint.config*",
+		"**/wordlists/**",
+		"**/scripts/**",
+		"**/contracts/**",
+		"changelog.md"
+	],
+	"words": [
+		"autorelease",
+		"casbin",
+		"casdoor",
+		"Casdoor",
+		"hotfixes",
+		"nameof",
+		"Ptype",
+		"ptype",
+		"Stiftung"
+	],
+	"ignoreRegExpList": [
+		"/from\\s+(['\"]).*\\1/",
+		"/eslint-disable.*/",
+		"/^```shell[\\s\\S]*?```$/gm",
+		"/^```json[\\s\\S]*?```$/gm",
+		"/^```typescript[\\s\\S]*?```$/gm",
+		"/tst1.*/",
+		"/^```(.|\\s)*?```\\s*$/gm"
+	]
+}
