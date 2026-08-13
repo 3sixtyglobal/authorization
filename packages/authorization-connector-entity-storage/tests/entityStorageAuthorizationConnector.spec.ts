@@ -270,6 +270,65 @@ describe("EntityStorageAuthorizationConnector", () => {
 		});
 	});
 
+	describe("role-based access control", () => {
+		beforeEach(async () => {
+			await connector.addPolicy({
+				subject: "tenantAdmin",
+				object: "tenantCreate",
+				action: "execute"
+			});
+			await connector.addPolicy({
+				subject: "tenantAdmin",
+				object: "tenantList",
+				action: "execute"
+			});
+			await connector.addRoleForSubject("alice", "tenantAdmin");
+			await connector.addRoleForSubject("bob", "tenantAdmin");
+		});
+
+		test("all users assigned to a role can execute every action the role grants", async () => {
+			await expect(connector.check("alice", "tenantCreate", "execute")).resolves.toBe(true);
+			await expect(connector.check("alice", "tenantList", "execute")).resolves.toBe(true);
+			await expect(connector.check("bob", "tenantCreate", "execute")).resolves.toBe(true);
+			await expect(connector.check("bob", "tenantList", "execute")).resolves.toBe(true);
+		});
+
+		test("a user without the role is denied access to role-gated resources", async () => {
+			await expect(connector.check("charlie", "tenantCreate", "execute")).resolves.toBe(false);
+			await expect(connector.check("charlie", "tenantList", "execute")).resolves.toBe(false);
+		});
+
+		test("users cannot perform actions not covered by the role", async () => {
+			await expect(connector.check("alice", "tenantCreate", "delete")).resolves.toBe(false);
+			await expect(connector.check("bob", "tenantDelete", "execute")).resolves.toBe(false);
+		});
+
+		test("removing one user from the role does not affect other users", async () => {
+			await connector.removeRoleForSubject("alice", "tenantAdmin");
+			await expect(connector.check("alice", "tenantCreate", "execute")).resolves.toBe(false);
+			await expect(connector.check("bob", "tenantCreate", "execute")).resolves.toBe(true);
+		});
+
+		test("removing a policy revokes access for all users assigned to the role", async () => {
+			await connector.removePolicy({
+				subject: "tenantAdmin",
+				object: "tenantCreate",
+				action: "execute"
+			});
+			await expect(connector.check("alice", "tenantCreate", "execute")).resolves.toBe(false);
+			await expect(connector.check("bob", "tenantCreate", "execute")).resolves.toBe(false);
+			await expect(connector.check("alice", "tenantList", "execute")).resolves.toBe(true);
+		});
+
+		test("a user with multiple roles has combined access from all roles", async () => {
+			await connector.addPolicy({ subject: "auditor", object: "auditLog", action: "read" });
+			await connector.addRoleForSubject("alice", "auditor");
+			await expect(connector.check("alice", "tenantCreate", "execute")).resolves.toBe(true);
+			await expect(connector.check("alice", "auditLog", "read")).resolves.toBe(true);
+			await expect(connector.check("bob", "auditLog", "read")).resolves.toBe(false);
+		});
+	});
+
 	describe("addRoleForSubject / hasRoleForSubject", () => {
 		test("assigns a role and confirms it exists", async () => {
 			await connector.addRoleForSubject("alice", "admin");
