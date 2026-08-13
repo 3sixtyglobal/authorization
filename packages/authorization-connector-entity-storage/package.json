@@ -36,6 +36,7 @@
 		"@twin.org/nameof": "next"
 	},
 	"devDependencies": {
+		"@twin.org/context": "next",
 		"@twin.org/entity-storage-connector-memory": "next",
 		"@twin.org/nameof-transformer": "next",
 		"@twin.org/nameof-vitest-plugin": "next",

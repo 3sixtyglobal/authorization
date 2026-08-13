@@ -1,12 +1,14 @@
 // Copyright 2026 IOTA Stiftung.
 // SPDX-License-Identifier: Apache-2.0.
 import type { IAuthorizationConnector, IAuthorizationPolicy } from "@twin.org/authorization-models";
+import { ContextIdKeys, ContextIdStore } from "@twin.org/context";
 import {
 	BaseError,
 	ComponentFactory,
 	Converter,
 	GeneralError,
 	Guards,
+	Is,
 	StringHelper
 } from "@twin.org/core";
 import type { ILoggingComponent } from "@twin.org/logging-models";
@@ -186,6 +188,9 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(action), action);
 
 		try {
+			const tenantId = await this.getTenantId();
+			const prefixedSubject = this.applyTenant(tenantId, subject);
+			const prefixedObject = this.applyTenant(tenantId, object);
 			const allRules = await this.getAllRawPolicies();
 
 			const permissions = allRules.filter(r => r.Ptype === "p");
@@ -199,8 +204,8 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 				roleGraph.get(g.V0)?.add(g.V1);
 			}
 
-			const reachable = new Set<string>([subject]);
-			const queue: string[] = [subject];
+			const reachable = new Set<string>([prefixedSubject]);
+			const queue: string[] = [prefixedSubject];
 			while (queue.length > 0) {
 				const current = queue.shift() ?? "";
 				for (const role of roleGraph.get(current) ?? []) {
@@ -211,7 +216,9 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 				}
 			}
 
-			return permissions.some(p => reachable.has(p.V0) && p.V1 === object && p.V2 === action);
+			return permissions.some(
+				p => reachable.has(p.V0) && p.V1 === prefixedObject && p.V2 === action
+			);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -254,6 +261,7 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		);
 
 		try {
+			const tenantId = await this.getTenantId();
 			const response = await FetchHelper.fetchJson<
 				{ ptype: string; v0: string; v1: string; v2: string },
 				ICasbinServerResponse<string>
@@ -261,7 +269,12 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 				CasbinAuthorizationConnector.CLASS_NAME,
 				`${this._baseUrl}/api/add-policy?id=${this._encodedEnforcerId}`,
 				HttpMethod.POST,
-				{ ptype: "p", v0: policy.subject, v1: policy.object, v2: policy.action },
+				{
+					ptype: "p",
+					v0: this.applyTenant(tenantId, policy.subject),
+					v1: this.applyTenant(tenantId, policy.object),
+					v2: policy.action
+				},
 				this._requestOptions
 			);
 
@@ -308,6 +321,7 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		);
 
 		try {
+			const tenantId = await this.getTenantId();
 			const response = await FetchHelper.fetchJson<
 				{ ptype: string; v0: string; v1: string; v2: string },
 				ICasbinServerResponse<string>
@@ -315,7 +329,12 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 				CasbinAuthorizationConnector.CLASS_NAME,
 				`${this._baseUrl}/api/remove-policy?id=${this._encodedEnforcerId}`,
 				HttpMethod.POST,
-				{ ptype: "p", v0: policy.subject, v1: policy.object, v2: policy.action },
+				{
+					ptype: "p",
+					v0: this.applyTenant(tenantId, policy.subject),
+					v1: this.applyTenant(tenantId, policy.object),
+					v2: policy.action
+				},
 				this._requestOptions
 			);
 
@@ -360,10 +379,15 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		limit?: number
 	): Promise<{ entities: IAuthorizationPolicy[]; cursor?: string }> {
 		try {
+			const tenantId = await this.getTenantId();
 			const rules = await this.getAllRawPolicies();
 			let policies = rules
-				.filter(r => r.Ptype === "p")
-				.map(r => ({ subject: r.V0, object: r.V1, action: r.V2 }));
+				.filter(r => r.Ptype === "p" && this.isTenantValue(tenantId, r.V0))
+				.map(r => ({
+					subject: this.stripTenant(tenantId, r.V0),
+					object: this.stripTenant(tenantId, r.V1),
+					action: r.V2
+				}));
 
 			if (subject !== undefined) {
 				policies = policies.filter(p => p.subject === subject);
@@ -406,14 +430,17 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		limit?: number
 	): Promise<{ roles: string[]; cursor?: string }> {
 		try {
+			const tenantId = await this.getTenantId();
 			const rules = await this.getAllRawPolicies();
-			const gRules = rules.filter(rule => rule.Ptype === "g");
+			const gRules = rules.filter(
+				rule => rule.Ptype === "g" && this.isTenantValue(tenantId, rule.V1)
+			);
 			const v1Set = new Set(gRules.map(r => r.V1));
 			const roleSet = new Set<string>();
 			for (const r of gRules) {
-				roleSet.add(r.V1);
+				roleSet.add(this.stripTenant(tenantId, r.V1));
 				if (v1Set.has(r.V0)) {
-					roleSet.add(r.V0);
+					roleSet.add(this.stripTenant(tenantId, r.V0));
 				}
 			}
 			const allRoles = Array.from(roleSet).sort();
@@ -455,6 +482,7 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
 
 		try {
+			const tenantId = await this.getTenantId();
 			const response = await FetchHelper.fetchJson<
 				{ ptype: string; v0: string; v1: string },
 				ICasbinServerResponse<string>
@@ -462,7 +490,11 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 				CasbinAuthorizationConnector.CLASS_NAME,
 				`${this._baseUrl}/api/add-policy?id=${this._encodedEnforcerId}`,
 				HttpMethod.POST,
-				{ ptype: "g", v0: subject, v1: role },
+				{
+					ptype: "g",
+					v0: this.applyTenant(tenantId, subject),
+					v1: this.applyTenant(tenantId, role)
+				},
 				this._requestOptions
 			);
 
@@ -492,6 +524,7 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
 
 		try {
+			const tenantId = await this.getTenantId();
 			const response = await FetchHelper.fetchJson<
 				{ ptype: string; v0: string; v1: string },
 				ICasbinServerResponse<string>
@@ -499,7 +532,11 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 				CasbinAuthorizationConnector.CLASS_NAME,
 				`${this._baseUrl}/api/remove-policy?id=${this._encodedEnforcerId}`,
 				HttpMethod.POST,
-				{ ptype: "g", v0: subject, v1: role },
+				{
+					ptype: "g",
+					v0: this.applyTenant(tenantId, subject),
+					v1: this.applyTenant(tenantId, role)
+				},
 				this._requestOptions
 			);
 
@@ -527,10 +564,12 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
 
 		try {
+			const tenantId = await this.getTenantId();
+			const prefixedSubject = this.applyTenant(tenantId, subject);
 			const rules = await this.getAllRawPolicies();
-			const subjectRoles = rules.filter(r => r.Ptype === "g" && r.V0 === subject);
+			const subjectRoles = rules.filter(r => r.Ptype === "g" && r.V0 === prefixedSubject);
 			for (const rule of subjectRoles) {
-				await this.removeRoleForSubject(rule.V0, rule.V1);
+				await this.removeRoleForSubject(subject, this.stripTenant(tenantId, rule.V1));
 			}
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
@@ -555,8 +594,12 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
 
 		try {
+			const tenantId = await this.getTenantId();
+			const prefixedSubject = this.applyTenant(tenantId, subject);
 			const rules = await this.getAllRawPolicies();
-			return rules.filter(r => r.Ptype === "g" && r.V0 === subject).map(r => r.V1);
+			return rules
+				.filter(r => r.Ptype === "g" && r.V0 === prefixedSubject)
+				.map(r => this.stripTenant(tenantId, r.V1));
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -580,8 +623,12 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
 
 		try {
+			const tenantId = await this.getTenantId();
+			const prefixedRole = this.applyTenant(tenantId, role);
 			const rules = await this.getAllRawPolicies();
-			return rules.filter(r => r.Ptype === "g" && r.V1 === role).map(r => r.V0);
+			return rules
+				.filter(r => r.Ptype === "g" && r.V1 === prefixedRole && this.isTenantValue(tenantId, r.V0))
+				.map(r => this.stripTenant(tenantId, r.V0));
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -607,8 +654,14 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
 
 		try {
+			const tenantId = await this.getTenantId();
 			const rules = await this.getAllRawPolicies();
-			return rules.some(r => r.Ptype === "g" && r.V0 === subject && r.V1 === role);
+			return rules.some(
+				r =>
+					r.Ptype === "g" &&
+					r.V0 === this.applyTenant(tenantId, subject) &&
+					r.V1 === this.applyTenant(tenantId, role)
+			);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -634,6 +687,7 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(parentRole), parentRole);
 
 		try {
+			const tenantId = await this.getTenantId();
 			const response = await FetchHelper.fetchJson<
 				{ ptype: string; v0: string; v1: string },
 				ICasbinServerResponse<string>
@@ -641,7 +695,11 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 				CasbinAuthorizationConnector.CLASS_NAME,
 				`${this._baseUrl}/api/add-policy?id=${this._encodedEnforcerId}`,
 				HttpMethod.POST,
-				{ ptype: "g", v0: role, v1: parentRole },
+				{
+					ptype: "g",
+					v0: this.applyTenant(tenantId, role),
+					v1: this.applyTenant(tenantId, parentRole)
+				},
 				this._requestOptions
 			);
 
@@ -671,6 +729,7 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(parentRole), parentRole);
 
 		try {
+			const tenantId = await this.getTenantId();
 			const response = await FetchHelper.fetchJson<
 				{ ptype: string; v0: string; v1: string },
 				ICasbinServerResponse<string>
@@ -678,7 +737,11 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 				CasbinAuthorizationConnector.CLASS_NAME,
 				`${this._baseUrl}/api/remove-policy?id=${this._encodedEnforcerId}`,
 				HttpMethod.POST,
-				{ ptype: "g", v0: role, v1: parentRole },
+				{
+					ptype: "g",
+					v0: this.applyTenant(tenantId, role),
+					v1: this.applyTenant(tenantId, parentRole)
+				},
 				this._requestOptions
 			);
 
@@ -706,8 +769,12 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
 
 		try {
+			const tenantId = await this.getTenantId();
+			const prefixedRole = this.applyTenant(tenantId, role);
 			const rules = await this.getAllRawPolicies();
-			return rules.filter(r => r.Ptype === "g" && r.V0 === role).map(r => r.V1);
+			return rules
+				.filter(r => r.Ptype === "g" && r.V0 === prefixedRole && this.isTenantValue(tenantId, r.V1))
+				.map(r => this.stripTenant(tenantId, r.V1));
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -731,8 +798,12 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
 
 		try {
+			const tenantId = await this.getTenantId();
+			const prefixedRole = this.applyTenant(tenantId, role);
 			const rules = await this.getAllRawPolicies();
-			return rules.filter(r => r.Ptype === "g" && r.V1 === role).map(r => r.V0);
+			return rules
+				.filter(r => r.Ptype === "g" && r.V1 === prefixedRole && this.isTenantValue(tenantId, r.V0))
+				.map(r => this.stripTenant(tenantId, r.V0));
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -744,6 +815,54 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 				err
 			);
 		}
+	}
+
+	/**
+	 * Get the tenant ID from the ambient context store.
+	 * @returns The tenant ID string, or undefined when no tenant context is active.
+	 * @internal
+	 */
+	private async getTenantId(): Promise<string | undefined> {
+		const contextIds = await ContextIdStore.getContextIds();
+		const tenantId = contextIds?.[ContextIdKeys.Tenant];
+		return Is.stringValue(tenantId) ? tenantId : undefined;
+	}
+
+	/**
+	 * Prefix a value with the tenant ID when a tenant is active.
+	 * @param tenantId The active tenant ID, or undefined.
+	 * @param value The value to prefix.
+	 * @returns The prefixed value, or the original value when no tenant is active.
+	 * @internal
+	 */
+	private applyTenant(tenantId: string | undefined, value: string): string {
+		return tenantId !== undefined ? `${tenantId}:${value}` : value;
+	}
+
+	/**
+	 * Strip the tenant prefix from a value when a tenant is active.
+	 * @param tenantId The active tenant ID, or undefined.
+	 * @param value The value to strip.
+	 * @returns The value with the tenant prefix removed, or the original value when no tenant is active.
+	 * @internal
+	 */
+	private stripTenant(tenantId: string | undefined, value: string): string {
+		if (tenantId === undefined) {
+			return value;
+		}
+		const prefix = `${tenantId}:`;
+		return value.startsWith(prefix) ? value.slice(prefix.length) : value;
+	}
+
+	/**
+	 * Return true when a value belongs to the current tenant (or no tenant is active).
+	 * @param tenantId The active tenant ID, or undefined.
+	 * @param value The value to test.
+	 * @returns True if the value belongs to the current tenant.
+	 * @internal
+	 */
+	private isTenantValue(tenantId: string | undefined, value: string): boolean {
+		return tenantId === undefined || value.startsWith(`${tenantId}:`);
 	}
 
 	/**

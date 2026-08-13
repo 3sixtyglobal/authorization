@@ -8,7 +8,8 @@ import {
 	type IAuthorizationConnector,
 	type IAuthorizationPolicy
 } from "@twin.org/authorization-models";
-import { ComponentFactory, GeneralError, Guards, Is } from "@twin.org/core";
+import { ContextIdKeys, ContextIdStore } from "@twin.org/context";
+import { ComponentFactory, GeneralError, Guards, Is, LfuCache } from "@twin.org/core";
 import { nameof } from "@twin.org/nameof";
 import { MetricHelper, type ITelemetryComponent } from "@twin.org/telemetry-models";
 import type { IAuthorizationServiceConstructorOptions } from "./models/IAuthorizationServiceConstructorOptions.js";
@@ -35,6 +36,12 @@ export class AuthorizationService implements IAuthorizationComponent {
 	private readonly _telemetryComponent?: ITelemetryComponent;
 
 	/**
+	 * LFU cache for check() results, keyed by tenant-aware composite key.
+	 * @internal
+	 */
+	private readonly _checkCache: LfuCache<boolean>;
+
+	/**
 	 * Create a new instance of AuthorizationService.
 	 * @param options The constructor options.
 	 * @throws {GeneralError} If no authorization connectors are registered.
@@ -49,6 +56,10 @@ export class AuthorizationService implements IAuthorizationComponent {
 		this._telemetryComponent = ComponentFactory.getIfExists<ITelemetryComponent>(
 			options?.telemetryComponentType
 		);
+		this._checkCache = new LfuCache<boolean>({
+			capacity: options?.config?.checkCacheCapacity,
+			ttiMs: options?.config?.checkCacheTtiMs
+		});
 	}
 
 	/**
@@ -83,8 +94,10 @@ export class AuthorizationService implements IAuthorizationComponent {
 
 		try {
 			const connector = this.getConnector();
-			const result = await connector.check(subject, object, action);
-			return result;
+			const key = await this.checkCacheKey(subject, object, action);
+			return await this._checkCache.getOrSet(key, async () =>
+				connector.check(subject, object, action)
+			);
 		} catch (error) {
 			throw new GeneralError(AuthorizationService.CLASS_NAME, "checkFailed", undefined, error);
 		}
@@ -101,6 +114,7 @@ export class AuthorizationService implements IAuthorizationComponent {
 		try {
 			const connector = this.getConnector();
 			await connector.addPolicy(policy);
+			await this.deleteExactCacheKey(policy.subject, policy.object, policy.action);
 
 			await MetricHelper.metricIncrement(
 				this._telemetryComponent,
@@ -122,6 +136,7 @@ export class AuthorizationService implements IAuthorizationComponent {
 		try {
 			const connector = this.getConnector();
 			await connector.removePolicy(policy);
+			await this.deleteExactCacheKey(policy.subject, policy.object, policy.action);
 
 			await MetricHelper.metricIncrement(
 				this._telemetryComponent,
@@ -220,6 +235,7 @@ export class AuthorizationService implements IAuthorizationComponent {
 		try {
 			const connector = this.getConnector();
 			await connector.addRoleForSubject(subject, role);
+			await this.invalidateCacheByPrefix(subject);
 
 			await MetricHelper.metricIncrement(
 				this._telemetryComponent,
@@ -248,6 +264,7 @@ export class AuthorizationService implements IAuthorizationComponent {
 		try {
 			const connector = this.getConnector();
 			await connector.removeRoleForSubject(subject, role);
+			await this.invalidateCacheByPrefix(subject);
 
 			await MetricHelper.metricIncrement(
 				this._telemetryComponent,
@@ -274,6 +291,7 @@ export class AuthorizationService implements IAuthorizationComponent {
 		try {
 			const connector = this.getConnector();
 			await connector.removeAllRolesForSubject(subject);
+			await this.invalidateCacheByPrefix(subject);
 
 			await MetricHelper.metricIncrement(
 				this._telemetryComponent,
@@ -370,6 +388,7 @@ export class AuthorizationService implements IAuthorizationComponent {
 		try {
 			const connector = this.getConnector();
 			await connector.addRoleInheritance(role, parentRole);
+			await this.invalidateCacheByPrefix(role);
 
 			await MetricHelper.metricIncrement(
 				this._telemetryComponent,
@@ -398,6 +417,7 @@ export class AuthorizationService implements IAuthorizationComponent {
 		try {
 			const connector = this.getConnector();
 			await connector.removeRoleInheritance(role, parentRole);
+			await this.invalidateCacheByPrefix(role);
 
 			await MetricHelper.metricIncrement(
 				this._telemetryComponent,
@@ -454,6 +474,52 @@ export class AuthorizationService implements IAuthorizationComponent {
 				undefined,
 				error
 			);
+		}
+	}
+
+	/**
+	 * Build a tenant-aware cache key for a check() call.
+	 * @param subject The subject.
+	 * @param object The object.
+	 * @param action The action.
+	 * @returns The cache key string.
+	 * @internal
+	 */
+	private async checkCacheKey(subject: string, object: string, action: string): Promise<string> {
+		const contextIds = await ContextIdStore.getContextIds();
+		const tenantId = contextIds?.[ContextIdKeys.Tenant] ?? "";
+		return `${tenantId}:${subject}:${object}:${action}`;
+	}
+
+	/**
+	 * Delete the exact cache entry for the given subject, object, and action.
+	 * @param subject The subject.
+	 * @param object The object.
+	 * @param action The action.
+	 * @internal
+	 */
+	private async deleteExactCacheKey(
+		subject: string,
+		object: string,
+		action: string
+	): Promise<void> {
+		const key = await this.checkCacheKey(subject, object, action);
+		this._checkCache.delete(key);
+	}
+
+	/**
+	 * Evict all cached check() results whose key starts with the given part under the current tenant.
+	 * @param part The subject or role name to use as the key prefix segment.
+	 * @internal
+	 */
+	private async invalidateCacheByPrefix(part: string): Promise<void> {
+		const contextIds = await ContextIdStore.getContextIds();
+		const tenantId = contextIds?.[ContextIdKeys.Tenant] ?? "";
+		const prefix = `${tenantId}:${part}:`;
+		for (const key of this._checkCache.keys()) {
+			if (key.startsWith(prefix)) {
+				this._checkCache.delete(key);
+			}
 		}
 	}
 

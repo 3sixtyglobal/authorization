@@ -14,178 +14,29 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    # Inject secrets as env vars so subsequent steps can reference them without re-expanding the secret.
-    - name: Load Test Environment Variables
+    - name: Start Casdoor
+      if: inputs.package == 'packages/authorization-connector-casbin' || inputs.package == 'all'
       shell: bash
       run: |
-        printf '%s\n' "${{ inputs.test_env_vars }}" >> "$GITHUB_ENV"
+        CONTAINER_NAME="twin-authorization-casbin"
 
-    - name: Set IOTA CLI versions
-      if: inputs.package == 'packages/verifiable-storage-connector-iota' || inputs.package == 'all'
-      shell: bash
-      run: |
-        echo "IOTA_CLI_VERSION_MAINNET=1.25.0" >> $GITHUB_ENV
-        echo "IOTA_CLI_VERSION_TESTNET=1.26.1-rc" >> $GITHUB_ENV
-        echo "IOTA_CLI_VERSION_DEVNET=1.26.0-beta" >> $GITHUB_ENV
+        docker rm -f "$CONTAINER_NAME" || true
+        docker rmi casbin/casdoor-all-in-one:latest || true
+        docker pull casbin/casdoor-all-in-one:latest
 
-    - name: Download IOTA CLI
-      if: inputs.package == 'packages/verifiable-storage-connector-iota' || inputs.package == 'all'
-      shell: bash
-      run: |
-        cd ..
-        wget https://github.com/iotaledger/iota/releases/download/v$IOTA_CLI_VERSION_TESTNET/iota-v$IOTA_CLI_VERSION_TESTNET-linux-x86_64.tgz -O iota-cli.tgz
-        tar xzf iota-cli.tgz
-        rm iota-cli.tgz
-        chmod +x iota
-        sudo mv iota /usr/local/bin/iota
-        iota --version
+        docker run -d \
+          --name "$CONTAINER_NAME" \
+          -p 48000:8000 \
+          casbin/casdoor-all-in-one:latest
 
-    - name: Start TWIN Gas Station Test Environment
-      if: inputs.package == 'packages/verifiable-storage-connector-iota' || inputs.package == 'all'
-      shell: bash
-      run: |
-        echo "Starting TWIN Gas Station Test Environment (includes Redis + Gas Station)..."
-        docker pull twinfoundation/twin-gas-station-test:latest
-        docker run -d --name twin-gas-station-test \
-          -p 6379:6379 -p 9527:9527 -p 9184:9184 \
-          -e IOTA_NODE_URL="https://api.testnet.iota.cafe" \
-          -e GAS_STATION_AUTH="qEyCL6d9BKKFl/tfDGAKeGFkhUlf7FkqiGV7Xw4JUsI=" \
-          -e GAS_STATION_KEYPAIR="${TEST_GAS_STATION_KEYPAIR}" \
-          twinfoundation/twin-gas-station-test:latest
-
-    - name: Wait for Services to be Ready
-      if: inputs.package == 'packages/verifiable-storage-connector-iota' || inputs.package == 'all'
-      shell: bash
-      run: |
-        echo "Waiting for Redis and Gas Station to start..."
-
-        # Wait for Redis
-        REDIS_READY=false
-        for i in {1..30}; do
-          if docker exec twin-gas-station-test redis-cli ping 2>/dev/null | grep -q PONG; then
-            echo "✅ Redis is ready!"
-            REDIS_READY=true
-            break
+        for i in {1..60}; do
+          if curl --fail --silent "http://127.0.0.1:48000" > /dev/null; then
+            echo "Casdoor is ready."
+            exit 0
           fi
-          echo "Attempt $i: Redis not ready yet, waiting..."
-          sleep 2
+          sleep 1
         done
 
-        # Verify Redis is actually ready
-        if [ "$REDIS_READY" = false ]; then
-          echo "❌ Redis failed to start after 30 attempts (60 seconds)"
-          docker logs twin-gas-station-test --tail 20
-          exit 1
-        fi
-
-        # Wait for Gas Station
-        GAS_STATION_READY=false
-        for i in {1..45}; do
-          if curl -f http://localhost:9527/ 2>/dev/null; then
-            echo "✅ Gas station is ready!"
-            GAS_STATION_READY=true
-            break
-          fi
-          echo "Attempt $i: Gas station not ready yet, waiting..."
-          sleep 5
-        done
-
-        # Verify Gas Station is actually ready
-        if [ "$GAS_STATION_READY" = false ]; then
-          echo "❌ Gas Station failed to start after 45 attempts (225 seconds)"
-          docker logs twin-gas-station-test --tail 20
-          exit 1
-        fi
-
-        echo "✅ All services are ready!"
-
-    - name: Clean Redis and Restart Gas Station
-      if: inputs.package == 'packages/verifiable-storage-connector-iota' || inputs.package == 'all'
-      shell: bash
-      run: |
-        echo "Flushing Redis cache..."
-        docker exec twin-gas-station-test redis-cli FLUSHALL
-        echo "Restarting gas station container..."
-        docker restart twin-gas-station-test
-        echo "Waiting for services to restart..."
-        sleep 15
-        echo "Checking gas station status after restart..."
-        docker ps | grep twin-gas-station-test
-        echo "Recent container logs:"
-        docker logs twin-gas-station-test --tail 20
-
-        # Re-verify Redis is ready after restart
-        REDIS_RESTART_READY=false
-        for i in {1..30}; do
-          if docker exec twin-gas-station-test redis-cli ping 2>/dev/null | grep -q PONG; then
-            echo "✅ Redis is ready after restart!"
-            REDIS_RESTART_READY=true
-            break
-          fi
-          echo "Attempt $i: Redis not ready yet after restart, waiting..."
-          sleep 2
-        done
-
-        # Verify Redis is actually ready after restart
-        if [ "$REDIS_RESTART_READY" = false ]; then
-          echo "❌ Redis failed to restart after 30 attempts (60 seconds)"
-          docker logs twin-gas-station-test --tail 20
-          exit 1
-        fi
-        # Verify Gas Station is ready after restart
-        echo "Checking if gas station port is accessible..."
-        GAS_STATION_RESTART_READY=false
-        for i in {1..45}; do
-          if curl -f http://localhost:9527/ 2>/dev/null; then
-            echo "✅ Gas station is ready after restart!"
-            GAS_STATION_RESTART_READY=true
-            break
-          fi
-          echo "Attempt $i: Gas station not ready after restart, waiting..."
-          sleep 5
-        done
-
-        # Verify Gas Station is actually ready after restart
-        if [ "$GAS_STATION_RESTART_READY" = false ]; then
-          echo "❌ Gas Station failed to restart after 45 attempts (225 seconds)"
-          docker logs twin-gas-station-test --tail 20
-          exit 1
-        fi
-
-    - name: Fund Gas Station Sponsor
-      if: inputs.package == 'packages/verifiable-storage-connector-iota' || inputs.package == 'all'
-      shell: bash
-      run: |
-        echo "Getting sponsor address from gas station..."
-        SPONSOR_RESPONSE=$(curl -s -X POST http://localhost:9527/v1/reserve_gas \
-          -H "Content-Type: application/json" \
-          -H "Authorization: Bearer qEyCL6d9BKKFl/tfDGAKeGFkhUlf7FkqiGV7Xw4JUsI=" \
-          -d '{"gas_budget": 10000000, "reserve_duration_secs": 10}')
-
-        SPONSOR_ADDRESS=$(echo "$SPONSOR_RESPONSE" | jq -r '.result.sponsor_address')
-        echo "Sponsor address: $SPONSOR_ADDRESS"
-
-        if [ "$SPONSOR_ADDRESS" != "null" ] && [ -n "$SPONSOR_ADDRESS" ]; then
-          echo "Funding sponsor address with IOTA faucet..."
-          curl -X POST "https://faucet.testnet.iota.cafe/gas" \
-            -H "Content-Type: application/json" \
-            -d "{\"FixedAmountRequest\":{\"recipient\":\"$SPONSOR_ADDRESS\"}}" || echo "Faucet funding may have failed, but continuing..."
-          
-          echo "Waiting 10 seconds for funding to process..."
-          sleep 10
-          
-          echo "Verifying gas station can reserve gas after funding..."
-          TEST_RESPONSE=$(curl -s -X POST http://localhost:9527/v1/reserve_gas \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer qEyCL6d9BKKFl/tfDGAKeGFkhUlf7FkqiGV7Xw4JUsI=" \
-            -d '{"gas_budget": 50000000, "reserve_duration_secs": 30}')
-          
-          if echo "$TEST_RESPONSE" | jq -e '.result' > /dev/null; then
-            echo "✅ Gas station successfully funded and operational!"
-          else
-            echo "⚠️ Gas station may not be properly funded, but continuing..."
-            echo "Response: $TEST_RESPONSE"
-          fi
-        else
-          echo "Failed to get sponsor address, but continuing..."
-        fi
+        echo "Casdoor did not become ready in time."
+        docker logs "$CONTAINER_NAME" || true
+        exit 1

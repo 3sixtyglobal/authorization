@@ -1,5 +1,6 @@
 // Copyright 2026 IOTA Stiftung.
 // SPDX-License-Identifier: Apache-2.0.
+import { ContextIdKeys, ContextIdStore } from "@twin.org/context";
 import { MemoryEntityStorageConnector } from "@twin.org/entity-storage-connector-memory";
 import { EntityStorageConnectorFactory } from "@twin.org/entity-storage-models";
 import { nameof } from "@twin.org/nameof";
@@ -508,6 +509,154 @@ describe("EntityStorageAuthorizationConnector", () => {
 
 		test("removing a non-existent inheritance does not throw", async () => {
 			await expect(connector.removeRoleInheritance("editor", "viewer")).resolves.toBeUndefined();
+		});
+	});
+
+	describe("multi-tenant isolation", () => {
+		let tenantPolicyStorage: MemoryEntityStorageConnector<AuthorizationPolicy>;
+		let tenantRoleStorage: MemoryEntityStorageConnector<AuthorizationRoleAssignment>;
+		let tenantInheritanceStorage: MemoryEntityStorageConnector<AuthorizationRoleInheritance>;
+		let tenantConnector: EntityStorageAuthorizationConnector;
+
+		beforeEach(async () => {
+			tenantPolicyStorage = new MemoryEntityStorageConnector<AuthorizationPolicy>({
+				entitySchema: nameof<AuthorizationPolicy>(),
+				partitionContextIds: [ContextIdKeys.Tenant],
+				config: { storageKey: "tenant-authorization-policy" }
+			});
+			await tenantPolicyStorage.teardown();
+			EntityStorageConnectorFactory.register(
+				"tenant-authorization-policy",
+				() => tenantPolicyStorage
+			);
+
+			tenantRoleStorage = new MemoryEntityStorageConnector<AuthorizationRoleAssignment>({
+				entitySchema: nameof<AuthorizationRoleAssignment>(),
+				partitionContextIds: [ContextIdKeys.Tenant],
+				config: { storageKey: "tenant-authorization-role" }
+			});
+			await tenantRoleStorage.teardown();
+			EntityStorageConnectorFactory.register("tenant-authorization-role", () => tenantRoleStorage);
+
+			tenantInheritanceStorage = new MemoryEntityStorageConnector<AuthorizationRoleInheritance>({
+				entitySchema: nameof<AuthorizationRoleInheritance>(),
+				partitionContextIds: [ContextIdKeys.Tenant],
+				config: { storageKey: "tenant-authorization-role-inheritance" }
+			});
+			await tenantInheritanceStorage.teardown();
+			EntityStorageConnectorFactory.register(
+				"tenant-authorization-role-inheritance",
+				() => tenantInheritanceStorage
+			);
+
+			tenantConnector = new EntityStorageAuthorizationConnector({
+				authorizationPolicyEntityStorageType: "tenant-authorization-policy",
+				authorizationRoleEntityStorageType: "tenant-authorization-role",
+				authorizationRoleInheritanceEntityStorageType: "tenant-authorization-role-inheritance"
+			});
+		});
+
+		afterEach(async () => {
+			await tenantPolicyStorage.teardown();
+			await tenantRoleStorage.teardown();
+			await tenantInheritanceStorage.teardown();
+		});
+
+		test("policies added under one tenant are not visible to another", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantA" }, async () => {
+				await tenantConnector.addPolicy({ subject: "alice", object: "/data", action: "read" });
+			});
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantB" }, async () => {
+				await tenantConnector.addPolicy({ subject: "alice", object: "/data", action: "write" });
+			});
+
+			const tenantAPolicies = await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: "tenantA" },
+				async () => {
+					const { entities } = await tenantConnector.getAllPolicies();
+					return entities;
+				}
+			);
+			expect(tenantAPolicies).toHaveLength(1);
+			expect(tenantAPolicies[0]).toMatchObject({
+				subject: "alice",
+				object: "/data",
+				action: "read"
+			});
+
+			const tenantBPolicies = await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: "tenantB" },
+				async () => {
+					const { entities } = await tenantConnector.getAllPolicies();
+					return entities;
+				}
+			);
+			expect(tenantBPolicies).toHaveLength(1);
+			expect(tenantBPolicies[0]).toMatchObject({
+				subject: "alice",
+				object: "/data",
+				action: "write"
+			});
+		});
+
+		test("roles added under one tenant are not visible to another", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantA" }, async () => {
+				await tenantConnector.addRoleForSubject("alice", "admin");
+			});
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantB" }, async () => {
+				await tenantConnector.addRoleForSubject("alice", "editor");
+			});
+
+			const tenantARoles = await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: "tenantA" },
+				async () => tenantConnector.getRolesForSubject("alice")
+			);
+			expect(tenantARoles).toEqual(["admin"]);
+
+			const tenantBRoles = await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: "tenantB" },
+				async () => tenantConnector.getRolesForSubject("alice")
+			);
+			expect(tenantBRoles).toEqual(["editor"]);
+		});
+
+		test("check only evaluates policies within the current tenant", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantA" }, async () => {
+				await tenantConnector.addPolicy({ subject: "alice", object: "/data", action: "read" });
+			});
+
+			const allowedInA = await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantA" }, async () =>
+				tenantConnector.check("alice", "/data", "read")
+			);
+			expect(allowedInA).toBe(true);
+
+			const deniedInB = await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantB" }, async () =>
+				tenantConnector.check("alice", "/data", "read")
+			);
+			expect(deniedInB).toBe(false);
+		});
+
+		test("the same subject can have different roles in different tenants", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantA" }, async () => {
+				await tenantConnector.addRoleForSubject("alice", "admin");
+				await tenantConnector.addPolicy({ subject: "admin", object: "/admin", action: "write" });
+			});
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantB" }, async () => {
+				await tenantConnector.addRoleForSubject("alice", "viewer");
+				await tenantConnector.addPolicy({ subject: "viewer", object: "/admin", action: "write" });
+			});
+
+			const canWriteInA = await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: "tenantA" },
+				async () => tenantConnector.check("alice", "/admin", "write")
+			);
+			expect(canWriteInA).toBe(true);
+
+			const canWriteInB = await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: "tenantB" },
+				async () => tenantConnector.check("alice", "/admin", "write")
+			);
+			expect(canWriteInB).toBe(true);
 		});
 	});
 });
