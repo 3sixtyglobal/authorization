@@ -30,6 +30,12 @@ export interface IEntityStorageAuthorizationConnectorConstructorOptions {
 	authorizationRoleInheritanceEntityStorageType?: string;
 
 	/**
+	 * The entity storage type for the denormalised role name index.
+	 * @default "authorization-role-name"
+	 */
+	authorizationRoleNameEntityStorageType?: string;
+
+	/**
 	 * The configuration for the service.
 	 */
 	config?: IEntityStorageAuthorizationConnectorConfig;

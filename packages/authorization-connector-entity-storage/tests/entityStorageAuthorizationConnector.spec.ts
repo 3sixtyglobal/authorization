@@ -7,6 +7,7 @@ import { nameof } from "@twin.org/nameof";
 import type { AuthorizationPolicy } from "../src/entities/authorizationPolicy.js";
 import type { AuthorizationRoleAssignment } from "../src/entities/authorizationRoleAssignment.js";
 import type { AuthorizationRoleInheritance } from "../src/entities/authorizationRoleInheritance.js";
+import type { AuthorizationRoleName } from "../src/entities/authorizationRoleName.js";
 import { EntityStorageAuthorizationConnector } from "../src/entityStorageAuthorizationConnector.js";
 import { initSchema } from "../src/schema.js";
 
@@ -14,6 +15,7 @@ describe("EntityStorageAuthorizationConnector", () => {
 	let policyStorage: MemoryEntityStorageConnector<AuthorizationPolicy>;
 	let roleStorage: MemoryEntityStorageConnector<AuthorizationRoleAssignment>;
 	let inheritanceStorage: MemoryEntityStorageConnector<AuthorizationRoleInheritance>;
+	let roleNameStorage: MemoryEntityStorageConnector<AuthorizationRoleName>;
 	let connector: EntityStorageAuthorizationConnector;
 
 	beforeEach(async () => {
@@ -43,6 +45,13 @@ describe("EntityStorageAuthorizationConnector", () => {
 			() => inheritanceStorage
 		);
 
+		roleNameStorage = new MemoryEntityStorageConnector<AuthorizationRoleName>({
+			entitySchema: nameof<AuthorizationRoleName>(),
+			config: { storageKey: "authorization-role-name" }
+		});
+		await roleNameStorage.teardown();
+		EntityStorageConnectorFactory.register("authorization-role-name", () => roleNameStorage);
+
 		connector = new EntityStorageAuthorizationConnector();
 	});
 
@@ -50,6 +59,7 @@ describe("EntityStorageAuthorizationConnector", () => {
 		await policyStorage.teardown();
 		await roleStorage.teardown();
 		await inheritanceStorage.teardown();
+		await roleNameStorage.teardown();
 	});
 
 	test("can create an instance", () => {
@@ -488,6 +498,44 @@ describe("EntityStorageAuthorizationConnector", () => {
 			const { roles } = await connector.getAllRoles();
 			expect(roles).toEqual(["admin", "editor", "viewer"]);
 		});
+
+		test("role is removed from index when last assignment is removed", async () => {
+			await connector.addRoleForSubject("alice", "admin");
+			await connector.addRoleForSubject("bob", "admin");
+			await connector.removeRoleForSubject("alice", "admin");
+			const { roles } = await connector.getAllRoles();
+			expect(roles).toContain("admin");
+			await connector.removeRoleForSubject("bob", "admin");
+			const { roles: roles2 } = await connector.getAllRoles();
+			expect(roles2).not.toContain("admin");
+		});
+
+		test("role kept in index when still referenced by inheritance after assignment removed", async () => {
+			await connector.addRoleForSubject("alice", "editor");
+			await connector.addRoleInheritance("admin", "editor");
+			await connector.removeRoleForSubject("alice", "editor");
+			const { roles } = await connector.getAllRoles();
+			expect(roles).toContain("editor");
+		});
+
+		test("role removed from index when all assignments and inheritance removed", async () => {
+			await connector.addRoleForSubject("alice", "editor");
+			await connector.addRoleInheritance("admin", "editor");
+			await connector.removeRoleForSubject("alice", "editor");
+			await connector.removeRoleInheritance("admin", "editor");
+			const { roles } = await connector.getAllRoles();
+			expect(roles).not.toContain("editor");
+		});
+
+		test("removeAllRolesForSubject cleans up unreferenced role names", async () => {
+			await connector.addRoleForSubject("alice", "admin");
+			await connector.addRoleForSubject("alice", "editor");
+			await connector.addRoleForSubject("bob", "editor");
+			await connector.removeAllRolesForSubject("alice");
+			const { roles } = await connector.getAllRoles();
+			expect(roles).not.toContain("admin");
+			expect(roles).toContain("editor");
+		});
 	});
 
 	describe("removeRoleInheritance", () => {
@@ -516,6 +564,7 @@ describe("EntityStorageAuthorizationConnector", () => {
 		let tenantPolicyStorage: MemoryEntityStorageConnector<AuthorizationPolicy>;
 		let tenantRoleStorage: MemoryEntityStorageConnector<AuthorizationRoleAssignment>;
 		let tenantInheritanceStorage: MemoryEntityStorageConnector<AuthorizationRoleInheritance>;
+		let tenantRoleNameStorage: MemoryEntityStorageConnector<AuthorizationRoleName>;
 		let tenantConnector: EntityStorageAuthorizationConnector;
 
 		beforeEach(async () => {
@@ -549,10 +598,22 @@ describe("EntityStorageAuthorizationConnector", () => {
 				() => tenantInheritanceStorage
 			);
 
+			tenantRoleNameStorage = new MemoryEntityStorageConnector<AuthorizationRoleName>({
+				entitySchema: nameof<AuthorizationRoleName>(),
+				partitionContextIds: [ContextIdKeys.Tenant],
+				config: { storageKey: "tenant-authorization-role-name" }
+			});
+			await tenantRoleNameStorage.teardown();
+			EntityStorageConnectorFactory.register(
+				"tenant-authorization-role-name",
+				() => tenantRoleNameStorage
+			);
+
 			tenantConnector = new EntityStorageAuthorizationConnector({
 				authorizationPolicyEntityStorageType: "tenant-authorization-policy",
 				authorizationRoleEntityStorageType: "tenant-authorization-role",
-				authorizationRoleInheritanceEntityStorageType: "tenant-authorization-role-inheritance"
+				authorizationRoleInheritanceEntityStorageType: "tenant-authorization-role-inheritance",
+				authorizationRoleNameEntityStorageType: "tenant-authorization-role-name"
 			});
 		});
 
@@ -560,6 +621,7 @@ describe("EntityStorageAuthorizationConnector", () => {
 			await tenantPolicyStorage.teardown();
 			await tenantRoleStorage.teardown();
 			await tenantInheritanceStorage.teardown();
+			await tenantRoleNameStorage.teardown();
 		});
 
 		test("policies added under one tenant are not visible to another", async () => {
@@ -657,6 +719,33 @@ describe("EntityStorageAuthorizationConnector", () => {
 				async () => tenantConnector.check("alice", "/admin", "write")
 			);
 			expect(canWriteInB).toBe(true);
+		});
+
+		test("getAllRoles returns only roles for the current tenant", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantA" }, async () => {
+				await tenantConnector.addRoleForSubject("alice", "admin");
+			});
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantB" }, async () => {
+				await tenantConnector.addRoleForSubject("alice", "editor");
+			});
+
+			const tenantARoles = await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: "tenantA" },
+				async () => {
+					const { roles } = await tenantConnector.getAllRoles();
+					return roles;
+				}
+			);
+			expect(tenantARoles).toEqual(["admin"]);
+
+			const tenantBRoles = await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: "tenantB" },
+				async () => {
+					const { roles } = await tenantConnector.getAllRoles();
+					return roles;
+				}
+			);
+			expect(tenantBRoles).toEqual(["editor"]);
 		});
 	});
 });

@@ -3,6 +3,7 @@
 export * from "./entities/authorizationPolicy.js";
 export * from "./entities/authorizationRoleAssignment.js";
 export * from "./entities/authorizationRoleInheritance.js";
+export * from "./entities/authorizationRoleName.js";
 export * from "./entityStorageAuthorizationConnector.js";
 export * from "./models/IEntityStorageAuthorizationConnectorConfig.js";
 export * from "./models/IEntityStorageAuthorizationConnectorConstructorOptions.js";
