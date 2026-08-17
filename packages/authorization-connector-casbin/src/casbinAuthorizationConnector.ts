@@ -269,6 +269,75 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	}
 
 	/**
+	 * Check whether any of the given subjects are permitted to perform an action on a resource.
+	 * Fetches all policies once and evaluates each subject locally, avoiding repeated HTTP calls.
+	 * Returns one result per subject in the same order as the input array.
+	 * @param subjects The subjects to check.
+	 * @param object The object being accessed.
+	 * @param action The action to check.
+	 * @returns An array of per-subject results in input order.
+	 * @throws GeneralError if the check request fails.
+	 */
+	public async checkAny(
+		subjects: string[],
+		object: string,
+		action: string
+	): Promise<(boolean | undefined)[]> {
+		Guards.array<string>(CasbinAuthorizationConnector.CLASS_NAME, nameof(subjects), subjects);
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(object), object);
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(action), action);
+
+		if (subjects.length === 0) {
+			return [];
+		}
+
+		try {
+			const tenantId = await this.getTenantId();
+			const prefixedObject = this.applyTenant(tenantId, object);
+			const allRules = await this.getAllRawPolicies();
+
+			const permissions = allRules.filter(r => r.Ptype === "p");
+			const groupings = allRules.filter(r => r.Ptype === "g");
+
+			const roleGraph = new Map<string, Set<string>>();
+			for (const g of groupings) {
+				if (!roleGraph.has(g.V0)) {
+					roleGraph.set(g.V0, new Set());
+				}
+				roleGraph.get(g.V0)?.add(g.V1);
+			}
+
+			return subjects.map(subject => {
+				const prefixedSubject = this.applyTenant(tenantId, subject);
+				const reachable = new Set<string>([prefixedSubject]);
+				const queue: string[] = [prefixedSubject];
+				while (queue.length > 0) {
+					const current = queue.shift() ?? "";
+					for (const role of roleGraph.get(current) ?? []) {
+						if (!reachable.has(role)) {
+							reachable.add(role);
+							queue.push(role);
+						}
+					}
+				}
+				return permissions.some(
+					p => reachable.has(p.V0) && p.V1 === prefixedObject && p.V2 === action
+				);
+			});
+		} catch (err) {
+			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
+				throw err;
+			}
+			throw new GeneralError(
+				CasbinAuthorizationConnector.CLASS_NAME,
+				"checkAnyFailed",
+				{ object, action },
+				err
+			);
+		}
+	}
+
+	/**
 	 * Add a policy rule.
 	 * @param policy The policy to add.
 	 * @returns Nothing.

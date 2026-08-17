@@ -9,4 +9,9 @@ export interface IAuthorizationProcessorConfig {
 	 * Include the stack with errors.
 	 */
 	includeErrorStack?: boolean;
+
+	/**
+	 * The role to use when no roles are present in the context IDs.
+	 */
+	defaultRole?: string;
 }

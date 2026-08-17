@@ -375,4 +375,90 @@ describe("AuthorizationService", () => {
 			expect(tracker.callCount).toBe(3);
 		});
 	});
+
+	describe("checkAny", () => {
+		function makeConnectorWithCheckAny(
+			ns: string,
+			fn: (subjects: string[]) => (boolean | undefined)[]
+		): { callCount: number; lastSubjects: string[] } {
+			const tracker = { callCount: 0, lastSubjects: [] as string[] };
+			AuthorizationConnectorFactory.register(
+				ns,
+				() =>
+					({
+						className: () => ns,
+						checkAny: async (subjects: string[]) => {
+							tracker.callCount++;
+							tracker.lastSubjects = [...subjects];
+							return fn(subjects);
+						}
+					}) as unknown as IAuthorizationConnector
+			);
+			return tracker;
+		}
+
+		afterEach(() => {
+			for (const ns of AuthorizationConnectorFactory.names().filter(n => n.startsWith("any-"))) {
+				AuthorizationConnectorFactory.unregister(ns);
+			}
+		});
+
+		test("returns false when subjects is empty", async () => {
+			makeConnectorWithCheckAny("any-empty", () => []);
+			const service = new AuthorizationService({ config: { defaultNamespace: "any-empty" } });
+			await expect(service.checkAny([], "resource", "execute")).resolves.toBe(false);
+		});
+
+		test("returns true when a subject has a matching policy", async () => {
+			makeConnectorWithCheckAny("any-single", subjects => subjects.map(s => s === "alice"));
+			const service = new AuthorizationService({ config: { defaultNamespace: "any-single" } });
+			await expect(service.checkAny(["alice"], "resource", "execute")).resolves.toBe(true);
+		});
+
+		test("returns true when at least one of multiple subjects has a matching policy", async () => {
+			makeConnectorWithCheckAny("any-partial", subjects => subjects.map(s => s === "alice"));
+			const service = new AuthorizationService({ config: { defaultNamespace: "any-partial" } });
+			await expect(service.checkAny(["bob", "alice"], "resource", "execute")).resolves.toBe(true);
+		});
+
+		test("returns false when no subject has a matching policy", async () => {
+			makeConnectorWithCheckAny("any-none", subjects => subjects.map(() => false));
+			const service = new AuthorizationService({ config: { defaultNamespace: "any-none" } });
+			await expect(service.checkAny(["alice", "bob"], "resource", "execute")).resolves.toBe(false);
+		});
+
+		test("caches each subject result so the connector is not called again on subsequent calls", async () => {
+			const tracker = makeConnectorWithCheckAny("any-cache", subjects => subjects.map(() => false));
+			const service = new AuthorizationService({ config: { defaultNamespace: "any-cache" } });
+			await service.checkAny(["alice", "bob"], "resource", "execute");
+			expect(tracker.callCount).toBe(1);
+			await service.checkAny(["alice", "bob"], "resource", "execute");
+			expect(tracker.callCount).toBe(1);
+		});
+
+		test("returns true immediately when a subject is already cached as true", async () => {
+			const tracker = makeConnectorWithCheckAny("any-cache-hit", subjects =>
+				subjects.map(() => true)
+			);
+			const service = new AuthorizationService({ config: { defaultNamespace: "any-cache-hit" } });
+			await service.checkAny(["alice"], "resource", "execute");
+			expect(tracker.callCount).toBe(1);
+			const result = await service.checkAny(["alice", "bob"], "resource", "execute");
+			expect(result).toBe(true);
+			expect(tracker.callCount).toBe(1);
+		});
+
+		test("calls the connector only for subjects not already in the cache", async () => {
+			const tracker = makeConnectorWithCheckAny("any-cache-partial", subjects =>
+				subjects.map(() => false)
+			);
+			const service = new AuthorizationService({
+				config: { defaultNamespace: "any-cache-partial" }
+			});
+			await service.checkAny(["alice"], "resource", "execute");
+			await service.checkAny(["alice", "bob"], "resource", "execute");
+			expect(tracker.callCount).toBe(2);
+			expect(tracker.lastSubjects).toEqual(["bob"]);
+		});
+	});
 });

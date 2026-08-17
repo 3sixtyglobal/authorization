@@ -25,6 +25,17 @@ export interface IAuthorizationConnector extends IComponent {
 	check(subject: string, object: string, action: string): Promise<boolean>;
 
 	/**
+	 * Check whether any of the given subjects are permitted to perform an action on a resource.
+	 * Returns one result per subject in the same order as the input array.
+	 * A result of undefined indicates the connector did not evaluate that subject.
+	 * @param subjects The subjects to check.
+	 * @param object The object being accessed.
+	 * @param action The action to check.
+	 * @returns An array of per-subject results in input order.
+	 */
+	checkAny(subjects: string[], object: string, action: string): Promise<(boolean | undefined)[]>;
+
+	/**
 	 * Add a policy rule.
 	 * @param policy The policy to add.
 	 * @returns A promise that resolves when the policy has been added.

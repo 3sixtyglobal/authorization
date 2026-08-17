@@ -187,6 +187,45 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	}
 
 	/**
+	 * Check whether any of the given subjects are permitted to perform an action on a resource.
+	 * @param subjects The subjects to check.
+	 * @param object The object being accessed.
+	 * @param action The action to check.
+	 * @returns True if access is granted for at least one subject, false otherwise.
+	 * @throws GeneralError if the check request fails.
+	 */
+	public async checkAny(
+		subjects: string[],
+		object: string,
+		action: string
+	): Promise<(boolean | undefined)[]> {
+		Guards.array<string>(
+			EntityStorageAuthorizationConnector.CLASS_NAME,
+			nameof(subjects),
+			subjects
+		);
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(object), object);
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(action), action);
+
+		try {
+			if (subjects.length === 0) {
+				return [];
+			}
+			return await Promise.all(subjects.map(async subject => this.check(subject, object, action)));
+		} catch (err) {
+			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
+				throw err;
+			}
+			throw new GeneralError(
+				EntityStorageAuthorizationConnector.CLASS_NAME,
+				"checkAnyFailed",
+				{ object, action },
+				err
+			);
+		}
+	}
+
+	/**
 	 * Add a policy rule.
 	 * @param policy The policy to add.
 	 * @returns Nothing.

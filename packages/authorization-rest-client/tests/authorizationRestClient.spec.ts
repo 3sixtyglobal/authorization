@@ -133,6 +133,67 @@ describe("AuthorizationRestClient", () => {
 		});
 	});
 
+	describe("checkAny", () => {
+		test("throws when subjects is not an array", async () => {
+			await expect(client.checkAny(null as never, OBJECT, ACTION)).rejects.toMatchObject({
+				name: GuardError.CLASS_NAME,
+				message: "guard.array"
+			});
+		});
+
+		test("throws when object is empty", async () => {
+			await expect(client.checkAny([SUBJECT], "", ACTION)).rejects.toMatchObject({
+				name: GuardError.CLASS_NAME,
+				message: "guard.stringEmpty"
+			});
+		});
+
+		test("throws when action is empty", async () => {
+			await expect(client.checkAny([SUBJECT], OBJECT, "")).rejects.toMatchObject({
+				name: GuardError.CLASS_NAME,
+				message: "guard.stringEmpty"
+			});
+		});
+
+		test("sends POST to /{prefix}/check-any", async () => {
+			fetchMock.mockResolvedValueOnce(jsonResponse({ allowed: true }));
+
+			await client.checkAny([SUBJECT], OBJECT, ACTION);
+
+			const [url, options] = fetchMock.mock.calls[0];
+			expect(url).toBe(`${ENDPOINT}/${PREFIX}/check-any`);
+			expect(options.method).toBe(HttpMethod.POST);
+		});
+
+		test("sends subjects, object and action in the request body", async () => {
+			fetchMock.mockResolvedValueOnce(jsonResponse({ allowed: true }));
+
+			await client.checkAny([SUBJECT], OBJECT, ACTION);
+
+			const [, options] = fetchMock.mock.calls[0];
+			const body = JSON.parse(options.body);
+			expect(body.subjects).toEqual([SUBJECT]);
+			expect(body.object).toBe(OBJECT);
+			expect(body.action).toBe(ACTION);
+		});
+
+		test("returns true when allowed", async () => {
+			fetchMock.mockResolvedValueOnce(jsonResponse({ allowed: true }));
+
+			const result = await client.checkAny([SUBJECT], OBJECT, ACTION);
+
+			expect(result).toBe(true);
+		});
+
+		test("returns false when not allowed", async () => {
+			fetchMock.mockResolvedValueOnce(jsonResponse({ allowed: false }));
+
+			const result = await client.checkAny([SUBJECT], OBJECT, ACTION);
+
+			expect(result).toBe(false);
+		});
+	});
+
 	describe("addPolicy", () => {
 		test("throws when policy is undefined", async () => {
 			await expect(client.addPolicy(undefined as never)).rejects.toMatchObject({

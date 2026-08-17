@@ -298,6 +298,55 @@ describe("CasbinAuthorizationConnector", () => {
 		});
 	});
 
+	describe("checkAny", () => {
+		test("returns an empty array when subjects is empty", async () => {
+			await expect(connector.checkAny([], "document", "read")).resolves.toEqual([]);
+		});
+
+		test("returns [true] when the subject has a direct matching policy", async () => {
+			await connector.addPolicy({ subject: "alice", object: "document", action: "read" });
+			await expect(connector.checkAny(["alice"], "document", "read")).resolves.toEqual([true]);
+		});
+
+		test("returns [true, false] when only the first subject has a matching policy", async () => {
+			await connector.addPolicy({ subject: "alice", object: "document", action: "read" });
+			await expect(connector.checkAny(["alice", "bob"], "document", "read")).resolves.toEqual([
+				true,
+				false
+			]);
+		});
+
+		test("returns [false, true] when only the last subject has a matching policy", async () => {
+			await connector.addPolicy({ subject: "bob", object: "document", action: "read" });
+			await expect(connector.checkAny(["alice", "bob"], "document", "read")).resolves.toEqual([
+				false,
+				true
+			]);
+		});
+
+		test("returns [false, false] when no subject has a matching policy", async () => {
+			await connector.addPolicy({ subject: "alice", object: "document", action: "read" });
+			await expect(connector.checkAny(["nobody", "ghost"], "document", "read")).resolves.toEqual([
+				false,
+				false
+			]);
+		});
+
+		test("returns [true] when a subject has a policy via role assignment", async () => {
+			await connector.addPolicy({ subject: "admin", object: "report", action: "delete" });
+			await connector.addRoleForSubject("alice", "admin");
+			await expect(connector.checkAny(["alice"], "report", "delete")).resolves.toEqual([true]);
+		});
+
+		test("throws when object is empty", async () => {
+			await expect(connector.checkAny(["alice"], "", "read")).rejects.toThrow();
+		});
+
+		test("throws when action is empty", async () => {
+			await expect(connector.checkAny(["alice"], "document", "")).rejects.toThrow();
+		});
+	});
+
 	describe("role-based access control", () => {
 		beforeEach(async () => {
 			await connector.addPolicy({
@@ -607,6 +656,44 @@ describe("CasbinAuthorizationConnector", () => {
 			const { roles } = await connector.getAllRoles();
 			expect(roles).toEqual(["admin", "editor", "viewer"]);
 		});
+
+		test("role is removed from getAllRoles when its last assignment is removed", async () => {
+			await connector.addRoleForSubject("alice", "admin");
+			await connector.addRoleForSubject("bob", "admin");
+			await connector.removeRoleForSubject("alice", "admin");
+			const { roles } = await connector.getAllRoles();
+			expect(roles).toContain("admin");
+			await connector.removeRoleForSubject("bob", "admin");
+			const { roles: roles2 } = await connector.getAllRoles();
+			expect(roles2).not.toContain("admin");
+		});
+
+		test("role is kept in getAllRoles when still referenced by inheritance after assignment removed", async () => {
+			await connector.addRoleForSubject("alice", "editor");
+			await connector.addRoleInheritance("admin", "editor");
+			await connector.removeRoleForSubject("alice", "editor");
+			const { roles } = await connector.getAllRoles();
+			expect(roles).toContain("editor");
+		});
+
+		test("role is removed from getAllRoles when all assignments and inheritances are removed", async () => {
+			await connector.addRoleForSubject("alice", "editor");
+			await connector.addRoleInheritance("admin", "editor");
+			await connector.removeRoleForSubject("alice", "editor");
+			await connector.removeRoleInheritance("admin", "editor");
+			const { roles } = await connector.getAllRoles();
+			expect(roles).not.toContain("editor");
+		});
+
+		test("getAllRoles does not list a role after removeAllRolesForSubject removes its last reference", async () => {
+			await connector.addRoleForSubject("alice", "admin");
+			await connector.addRoleForSubject("alice", "editor");
+			await connector.addRoleForSubject("bob", "editor");
+			await connector.removeAllRolesForSubject("alice");
+			const { roles } = await connector.getAllRoles();
+			expect(roles).not.toContain("admin");
+			expect(roles).toContain("editor");
+		});
 	});
 
 	describe("multi-tenant isolation", () => {
@@ -705,6 +792,33 @@ describe("CasbinAuthorizationConnector", () => {
 				connector.check("alice", "/data", "read")
 			);
 			expect(deniedInB).toBe(false);
+		});
+
+		test("getAllRoles returns only roles for the current tenant", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantA" }, async () => {
+				await connector.addRoleForSubject("alice", "admin");
+			});
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantB" }, async () => {
+				await connector.addRoleForSubject("alice", "editor");
+			});
+
+			const tenantARoles = await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: "tenantA" },
+				async () => {
+					const { roles } = await connector.getAllRoles();
+					return roles;
+				}
+			);
+			expect(tenantARoles).toEqual(["admin"]);
+
+			const tenantBRoles = await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: "tenantB" },
+				async () => {
+					const { roles } = await connector.getAllRoles();
+					return roles;
+				}
+			);
+			expect(tenantBRoles).toEqual(["editor"]);
 		});
 
 		test("the same subject can have different roles in different tenants", async () => {

@@ -36,6 +36,12 @@ export class AuthorizationProcessor implements IBaseRouteProcessor {
 	private readonly _includeErrorStack: boolean;
 
 	/**
+	 * The role to use when no roles are present in the context IDs.
+	 * @internal
+	 */
+	private readonly _defaultRole: string | undefined;
+
+	/**
 	 * Create a new instance of AuthorizationProcessor.
 	 * @param options Options for the processor.
 	 */
@@ -44,6 +50,7 @@ export class AuthorizationProcessor implements IBaseRouteProcessor {
 			options?.authorizationComponentType ?? "authorization"
 		);
 		this._includeErrorStack = options?.config?.includeErrorStack ?? false;
+		this._defaultRole = options?.config?.defaultRole;
 	}
 
 	/**
@@ -70,20 +77,26 @@ export class AuthorizationProcessor implements IBaseRouteProcessor {
 		contextIds: IContextIds,
 		processorState: { [id: string]: unknown }
 	): Promise<void> {
-		if (!Is.empty(route) && !(route.requiresAuthorization ?? true)) {
+		if (!Is.empty(route) && (route.requiresAuthorization ?? true)) {
 			try {
-				const userId = contextIds[ContextIdKeys.User];
-				if (!Is.stringValue(userId)) {
-					throw new GeneralError(AuthorizationProcessor.CLASS_NAME, "userContextIdMissing");
-				}
-
 				const routeId = route.operationId;
 				if (!Is.stringValue(routeId)) {
 					throw new GeneralError(AuthorizationProcessor.CLASS_NAME, "routeIdMissing");
 				}
 
-				const success = await this._authorizationComponent.check(userId, routeId, "execute");
-				if (!success) {
+				const userId = contextIds[ContextIdKeys.User];
+				let subjects: string[];
+				if (Is.stringValue(userId)) {
+					subjects = [userId];
+				} else if (Is.stringValue(this._defaultRole)) {
+					subjects = [this._defaultRole];
+				} else {
+					subjects = [];
+				}
+				if (
+					subjects.length === 0 ||
+					!(await this._authorizationComponent.checkAny(subjects, routeId, "execute"))
+				) {
 					throw new UnauthorizedError(AuthorizationProcessor.CLASS_NAME, "accessDenied");
 				}
 			} catch (err) {

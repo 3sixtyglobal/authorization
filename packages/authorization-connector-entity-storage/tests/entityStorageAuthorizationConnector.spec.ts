@@ -316,6 +316,55 @@ describe("EntityStorageAuthorizationConnector", () => {
 		});
 	});
 
+	describe("checkAny", () => {
+		test("returns an empty array when subjects is empty", async () => {
+			await expect(connector.checkAny([], "document", "read")).resolves.toEqual([]);
+		});
+
+		test("returns [true] when the subject has a direct matching policy", async () => {
+			await connector.addPolicy({ subject: "alice", object: "document", action: "read" });
+			await expect(connector.checkAny(["alice"], "document", "read")).resolves.toEqual([true]);
+		});
+
+		test("returns [true, false] when only the first subject has a matching policy", async () => {
+			await connector.addPolicy({ subject: "alice", object: "document", action: "read" });
+			await expect(connector.checkAny(["alice", "bob"], "document", "read")).resolves.toEqual([
+				true,
+				false
+			]);
+		});
+
+		test("returns [false, true] when only the last subject has a matching policy", async () => {
+			await connector.addPolicy({ subject: "bob", object: "document", action: "read" });
+			await expect(connector.checkAny(["alice", "bob"], "document", "read")).resolves.toEqual([
+				false,
+				true
+			]);
+		});
+
+		test("returns [false, false] when no subject has a matching policy", async () => {
+			await connector.addPolicy({ subject: "alice", object: "document", action: "read" });
+			await expect(connector.checkAny(["nobody", "ghost"], "document", "read")).resolves.toEqual([
+				false,
+				false
+			]);
+		});
+
+		test("returns [true] when a subject has a policy via role assignment", async () => {
+			await connector.addPolicy({ subject: "admin", object: "report", action: "delete" });
+			await connector.addRoleForSubject("alice", "admin");
+			await expect(connector.checkAny(["alice"], "report", "delete")).resolves.toEqual([true]);
+		});
+
+		test("throws when object is empty", async () => {
+			await expect(connector.checkAny(["alice"], "", "read")).rejects.toThrow();
+		});
+
+		test("throws when action is empty", async () => {
+			await expect(connector.checkAny(["alice"], "document", "")).rejects.toThrow();
+		});
+	});
+
 	describe("role-based access control", () => {
 		beforeEach(async () => {
 			await connector.addPolicy({

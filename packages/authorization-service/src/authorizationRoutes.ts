@@ -10,6 +10,8 @@ import type {
 	IAuthorizationAddPolicyRequest,
 	IAuthorizationAddRoleForSubjectRequest,
 	IAuthorizationAddRoleInheritanceRequest,
+	IAuthorizationCheckAnyRequest,
+	IAuthorizationCheckAnyResponse,
 	IAuthorizationCheckRequest,
 	IAuthorizationCheckResponse,
 	IAuthorizationComponent,
@@ -39,6 +41,15 @@ import { nameof } from "@twin.org/nameof";
 import { HttpStatusCode } from "@twin.org/web";
 
 const ROUTES_SOURCE = "authorizationRoutes";
+
+/**
+ * The default authorization permissions for the routes, use to populate authorization rules.
+ */
+const PERMISSIONS_DEFAULT_ROUTE_READER = "authorization:read";
+const PERMISSIONS_DEFAULT_ROUTE_WRITER = {
+	permission: "authorization:write",
+	inherits: [PERMISSIONS_DEFAULT_ROUTE_READER]
+};
 
 /**
  * The tag to associate with the routes.
@@ -97,7 +108,49 @@ export function generateRestRoutesAuthorization(
 					}
 				]
 			}
-		]
+		],
+		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_READER]
+	};
+
+	const checkAnyRoute: IRestRoute<IAuthorizationCheckAnyRequest, IAuthorizationCheckAnyResponse> = {
+		operationId: "authorizationCheckAny",
+		summary: "Check an authorization policy for any of a list of subjects",
+		tag: tagsAuthorization[0].name,
+		method: "POST",
+		path: `${baseRouteName}/check-any`,
+		handler: async (httpRequestContext, request) =>
+			authorizationCheckAny(httpRequestContext, componentName, request),
+		requestType: {
+			type: nameof<IAuthorizationCheckAnyRequest>(),
+			examples: [
+				{
+					id: "authorizationCheckAnyExample",
+					request: {
+						body: {
+							subjects: ["user1", "user2"],
+							object: "/data",
+							action: "read"
+						}
+					}
+				}
+			]
+		},
+		responseType: [
+			{
+				type: nameof<IAuthorizationCheckAnyResponse>(),
+				examples: [
+					{
+						id: "authorizationCheckAnyResponseExample",
+						response: {
+							body: {
+								allowed: true
+							}
+						}
+					}
+				]
+			}
+		],
+		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_READER]
 	};
 
 	const addPolicyRoute: IRestRoute<IAuthorizationAddPolicyRequest, INoContentResponse> = {
@@ -135,7 +188,8 @@ export function generateRestRoutesAuthorization(
 					}
 				]
 			}
-		]
+		],
+		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_WRITER]
 	};
 
 	const removePolicyRoute: IRestRoute<IAuthorizationRemovePolicyRequest, INoContentResponse> = {
@@ -173,7 +227,8 @@ export function generateRestRoutesAuthorization(
 					}
 				]
 			}
-		]
+		],
+		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_WRITER]
 	};
 
 	const getAllPoliciesRoute: IRestRoute<
@@ -212,7 +267,8 @@ export function generateRestRoutesAuthorization(
 					}
 				]
 			}
-		]
+		],
+		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_READER]
 	};
 
 	const getAllRolesRoute: IRestRoute<
@@ -251,7 +307,8 @@ export function generateRestRoutesAuthorization(
 					}
 				]
 			}
-		]
+		],
+		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_READER]
 	};
 
 	const getPoliciesForSubjectRoute: IRestRoute<
@@ -292,7 +349,8 @@ export function generateRestRoutesAuthorization(
 					}
 				]
 			}
-		]
+		],
+		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_READER]
 	};
 
 	const addRoleForSubjectRoute: IRestRoute<
@@ -328,7 +386,8 @@ export function generateRestRoutesAuthorization(
 					}
 				]
 			}
-		]
+		],
+		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_WRITER]
 	};
 
 	const removeRoleForSubjectRoute: IRestRoute<
@@ -363,7 +422,8 @@ export function generateRestRoutesAuthorization(
 					}
 				]
 			}
-		]
+		],
+		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_WRITER]
 	};
 
 	const removeAllRolesForSubjectRoute: IRestRoute<
@@ -398,7 +458,8 @@ export function generateRestRoutesAuthorization(
 					}
 				]
 			}
-		]
+		],
+		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_WRITER]
 	};
 
 	const getRolesForSubjectRoute: IRestRoute<
@@ -435,7 +496,8 @@ export function generateRestRoutesAuthorization(
 					}
 				]
 			}
-		]
+		],
+		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_READER]
 	};
 
 	const hasRoleForSubjectRoute: IRestRoute<
@@ -472,7 +534,8 @@ export function generateRestRoutesAuthorization(
 					}
 				]
 			}
-		]
+		],
+		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_READER]
 	};
 
 	const getSubjectsForRoleRoute: IRestRoute<
@@ -509,7 +572,8 @@ export function generateRestRoutesAuthorization(
 					}
 				]
 			}
-		]
+		],
+		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_READER]
 	};
 
 	const addRoleInheritanceRoute: IRestRoute<
@@ -545,7 +609,8 @@ export function generateRestRoutesAuthorization(
 					}
 				]
 			}
-		]
+		],
+		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_WRITER]
 	};
 
 	const removeRoleInheritanceRoute: IRestRoute<
@@ -580,7 +645,8 @@ export function generateRestRoutesAuthorization(
 					}
 				]
 			}
-		]
+		],
+		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_WRITER]
 	};
 
 	const getParentRolesRoute: IRestRoute<
@@ -617,7 +683,8 @@ export function generateRestRoutesAuthorization(
 					}
 				]
 			}
-		]
+		],
+		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_READER]
 	};
 
 	const getChildRolesRoute: IRestRoute<
@@ -654,11 +721,13 @@ export function generateRestRoutesAuthorization(
 					}
 				]
 			}
-		]
+		],
+		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_READER]
 	};
 
 	return [
 		checkRoute,
+		checkAnyRoute,
 		addPolicyRoute,
 		removePolicyRoute,
 		getAllPoliciesRoute,
@@ -702,6 +771,38 @@ export async function authorizationCheck(
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
 	const allowed = await component.check(
 		request.body.subject,
+		request.body.object,
+		request.body.action
+	);
+
+	return { body: { allowed } };
+}
+
+/**
+ * Perform the check any authorization operation.
+ * @param httpRequestContext The request context for the API.
+ * @param componentName The name of the component to use in the routes.
+ * @param request The request.
+ * @returns The response object with additional http response properties.
+ */
+export async function authorizationCheckAny(
+	httpRequestContext: IHttpRequestContext,
+	componentName: string,
+	request: IAuthorizationCheckAnyRequest
+): Promise<IAuthorizationCheckAnyResponse> {
+	Guards.object<IAuthorizationCheckAnyRequest>(ROUTES_SOURCE, nameof(request), request);
+	Guards.object<IAuthorizationCheckAnyRequest["body"]>(
+		ROUTES_SOURCE,
+		nameof(request.body),
+		request.body
+	);
+	Guards.array<string>(ROUTES_SOURCE, nameof(request.body.subjects), request.body.subjects);
+	Guards.stringValue(ROUTES_SOURCE, nameof(request.body.object), request.body.object);
+	Guards.stringValue(ROUTES_SOURCE, nameof(request.body.action), request.body.action);
+
+	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
+	const allowed = await component.checkAny(
+		request.body.subjects,
 		request.body.object,
 		request.body.action
 	);

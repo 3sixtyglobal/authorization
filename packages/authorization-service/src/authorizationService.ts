@@ -45,7 +45,7 @@ export class AuthorizationService implements IAuthorizationComponent {
 	/**
 	 * Create a new instance of AuthorizationService.
 	 * @param options The constructor options.
-	 * @throws {GeneralError} If no authorization connectors are registered.
+	 * @throws GeneralError If no authorization connectors are registered.
 	 */
 	constructor(options?: IAuthorizationServiceConstructorOptions) {
 		const names = AuthorizationConnectorFactory.names();
@@ -59,7 +59,7 @@ export class AuthorizationService implements IAuthorizationComponent {
 		);
 		this._checkCache = new LfuCache<boolean>({
 			capacity: options?.config?.checkCacheCapacity,
-			ttiMs: options?.config?.checkCacheTtiMs
+			ttiMs: options?.config?.checkCacheTtiMs ?? 60000
 		});
 	}
 
@@ -90,9 +90,7 @@ export class AuthorizationService implements IAuthorizationComponent {
 		try {
 			const connector = this.getConnector();
 			await connector.initialize(rules);
-			for (const key of this._checkCache.keys()) {
-				this._checkCache.delete(key);
-			}
+			this._checkCache.clear();
 		} catch (error) {
 			throw new GeneralError(AuthorizationService.CLASS_NAME, "initializeFailed", undefined, error);
 		}
@@ -112,12 +110,70 @@ export class AuthorizationService implements IAuthorizationComponent {
 
 		try {
 			const connector = this.getConnector();
-			const key = await this.checkCacheKey(subject, object, action);
+			const key = await this.buildCacheKey(subject, object, action);
 			return await this._checkCache.getOrSet(key, async () =>
 				connector.check(subject, object, action)
 			);
 		} catch (error) {
 			throw new GeneralError(AuthorizationService.CLASS_NAME, "checkFailed", undefined, error);
+		}
+	}
+
+	/**
+	 * Check whether any of the given subjects are permitted to perform an action on a resource.
+	 * Checks the cache first and only calls the connector for uncached subjects.
+	 * Caches each per-subject result returned by the connector.
+	 * @param subjects The subjects to check.
+	 * @param object The object being accessed.
+	 * @param action The action to check.
+	 * @returns True if access is granted for at least one subject, false otherwise.
+	 */
+	public async checkAny(subjects: string[], object: string, action: string): Promise<boolean> {
+		Guards.array<string>(AuthorizationService.CLASS_NAME, nameof(subjects), subjects);
+		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(object), object);
+		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(action), action);
+
+		try {
+			if (subjects.length === 0) {
+				return false;
+			}
+
+			const uncachedSubjects: string[] = [];
+			for (const subject of subjects) {
+				const key = await this.buildCacheKey(subject, object, action);
+				const cached = this._checkCache.get(key);
+				if (cached === true) {
+					return true;
+				}
+				if (cached === undefined) {
+					uncachedSubjects.push(subject);
+				}
+			}
+
+			if (uncachedSubjects.length === 0) {
+				return false;
+			}
+
+			const connector = this.getConnector();
+			const results = await connector.checkAny(uncachedSubjects, object, action);
+
+			let finalResult = false;
+			for (let i = 0; i < uncachedSubjects.length; i++) {
+				const result = results[i];
+				if (result !== undefined) {
+					this._checkCache.set(
+						await this.buildCacheKey(uncachedSubjects[i], object, action),
+						result
+					);
+					if (result) {
+						finalResult = true;
+					}
+				}
+			}
+
+			return finalResult;
+		} catch (error) {
+			throw new GeneralError(AuthorizationService.CLASS_NAME, "checkAnyFailed", undefined, error);
 		}
 	}
 
@@ -496,14 +552,14 @@ export class AuthorizationService implements IAuthorizationComponent {
 	}
 
 	/**
-	 * Build a tenant-aware cache key for a check() call.
+	 * Build a tenant-aware cache key.
 	 * @param subject The subject.
 	 * @param object The object.
 	 * @param action The action.
 	 * @returns The cache key string.
 	 * @internal
 	 */
-	private async checkCacheKey(subject: string, object: string, action: string): Promise<string> {
+	private async buildCacheKey(subject: string, object: string, action: string): Promise<string> {
 		const contextIds = await ContextIdStore.getContextIds();
 		const tenantId = contextIds?.[ContextIdKeys.Tenant] ?? "";
 		return `${tenantId}:${subject}:${object}:${action}`;
@@ -521,7 +577,7 @@ export class AuthorizationService implements IAuthorizationComponent {
 		object: string,
 		action: string
 	): Promise<void> {
-		const key = await this.checkCacheKey(subject, object, action);
+		const key = await this.buildCacheKey(subject, object, action);
 		this._checkCache.delete(key);
 	}
 

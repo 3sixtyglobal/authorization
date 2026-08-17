@@ -4,6 +4,7 @@
 			"noConnectors": "There are no connectors registered with the authorization factory",
 			"initializeFailed": "The initialisation of the authorization rules failed",
 			"checkFailed": "The authorization check failed",
+			"checkAnyFailed": "The authorization check for any subject failed",
 			"addPolicyFailed": "The addition of the policy failed",
 			"removePolicyFailed": "The removal of the policy failed",
 			"getPoliciesForSubjectFailed": "The retrieval of policies for the subject failed",
@@ -21,9 +22,8 @@
 			"getChildRolesFailed": "The retrieval of child roles failed"
 		},
 		"authorizationProcessor": {
-			"userContextIdMissing": "The user context ID is missing",
 			"routeIdMissing": "The route ID is missing",
-			"accessDenied": "Access denied for the user context to the route"
+			"accessDenied": "Access denied for the user to the route"
 		}
 	}
 }

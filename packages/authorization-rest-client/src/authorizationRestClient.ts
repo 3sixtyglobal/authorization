@@ -6,6 +6,8 @@ import type {
 	IAuthorizationAddPolicyRequest,
 	IAuthorizationAddRoleForSubjectRequest,
 	IAuthorizationAddRoleInheritanceRequest,
+	IAuthorizationCheckAnyRequest,
+	IAuthorizationCheckAnyResponse,
 	IAuthorizationCheckRequest,
 	IAuthorizationCheckResponse,
 	IAuthorizationComponent,
@@ -92,6 +94,26 @@ export class AuthorizationRestClient extends BaseRestClient implements IAuthoriz
 			HttpMethod.POST,
 			{ body: { subject, object, action } }
 		);
+
+		return response.body.allowed;
+	}
+
+	/**
+	 * Check whether any of the given subjects are permitted to perform an action on a resource.
+	 * @param subjects The subjects to check.
+	 * @param object The object being accessed.
+	 * @param action The action to check.
+	 * @returns True if access is granted for at least one subject, false otherwise.
+	 */
+	public async checkAny(subjects: string[], object: string, action: string): Promise<boolean> {
+		Guards.array<string>(AuthorizationRestClient.CLASS_NAME, nameof(subjects), subjects);
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(object), object);
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(action), action);
+
+		const response = await this.fetch<
+			IAuthorizationCheckAnyRequest,
+			IAuthorizationCheckAnyResponse
+		>("/check-any", HttpMethod.POST, { body: { subjects, object, action } });
 
 		return response.body.allowed;
 	}

@@ -25,6 +25,15 @@ export interface IAuthorizationComponent extends IComponent {
 	check(subject: string, object: string, action: string): Promise<boolean>;
 
 	/**
+	 * Check whether any of the given subjects are permitted to perform an action on a resource.
+	 * @param subjects The subjects to check.
+	 * @param object The object being accessed.
+	 * @param action The action to check.
+	 * @returns True if access is granted for at least one subject, false otherwise.
+	 */
+	checkAny(subjects: string[], object: string, action: string): Promise<boolean>;
+
+	/**
 	 * Add a policy rule.
 	 * @param policy The policy to add.
 	 * @returns A promise that resolves when the policy has been added.
