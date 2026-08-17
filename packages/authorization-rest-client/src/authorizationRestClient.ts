@@ -25,7 +25,9 @@ import type {
 	IAuthorizationGetSubjectsForRoleResponse,
 	IAuthorizationHasRoleForSubjectRequest,
 	IAuthorizationHasRoleForSubjectResponse,
+	IAuthorizationInitializeRequest,
 	IAuthorizationPolicy,
+	IAuthorizationRules,
 	IAuthorizationRemoveAllRolesForSubjectRequest,
 	IAuthorizationRemovePolicyRequest,
 	IAuthorizationRemoveRoleForSubjectRequest,
@@ -58,6 +60,19 @@ export class AuthorizationRestClient extends BaseRestClient implements IAuthoriz
 	 */
 	public className(): string {
 		return AuthorizationRestClient.CLASS_NAME;
+	}
+
+	/**
+	 * Initialise the component with a default set of rules, applying policies, role assignments, and role inheritances.
+	 * @param rules The sets of rules to apply.
+	 * @returns Nothing.
+	 */
+	public async initialize(rules: IAuthorizationRules[]): Promise<void> {
+		await this.fetch<IAuthorizationInitializeRequest, INoContentResponse>(
+			"/initialize",
+			HttpMethod.POST,
+			{ body: { rules } }
+		);
 	}
 
 	/**

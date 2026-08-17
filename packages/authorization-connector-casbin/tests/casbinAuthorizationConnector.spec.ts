@@ -20,7 +20,7 @@ describe("CasbinAuthorizationConnector", () => {
 		for (const subject of ["alice", "bob", "carol", "a", "b", "superuser"]) {
 			await connector.removeAllRolesForSubject(subject);
 		}
-		for (const role of ["admin", "editor", "viewer", "superuser", "a", "b"]) {
+		for (const role of ["admin", "editor", "viewer", "superuser", "superAdmin", "a", "b"]) {
 			const parents = await connector.getParentRoles(role);
 			for (const parent of parents) {
 				await connector.removeRoleInheritance(role, parent);
@@ -47,6 +47,52 @@ describe("CasbinAuthorizationConnector", () => {
 	test("can create an instance", () => {
 		expect(connector).toBeDefined();
 		expect(connector.className()).toBe("CasbinAuthorizationConnector");
+	});
+
+	describe("initialize", () => {
+		test("applies policies from all rule sets", async () => {
+			await connector.initialize([
+				{ policies: [{ subject: "alice", object: "document", action: "read" }] },
+				{ policies: [{ subject: "bob", object: "report", action: "write" }] }
+			]);
+			const { entities } = await connector.getAllPolicies();
+			expect(entities).toHaveLength(2);
+		});
+
+		test("applies role assignments from rule sets", async () => {
+			await connector.initialize([
+				{
+					policies: [{ subject: "admin", object: "settings", action: "write" }],
+					roleAssignments: [{ subject: "alice", role: "admin" }]
+				}
+			]);
+			expect(await connector.check("alice", "settings", "write")).toBe(true);
+		});
+
+		test("applies role inheritances from rule sets", async () => {
+			await connector.initialize([
+				{
+					policies: [{ subject: "superAdmin", object: "settings", action: "delete" }],
+					roleAssignments: [{ subject: "alice", role: "admin" }],
+					roleInheritances: [{ role: "admin", parentRole: "superAdmin" }]
+				}
+			]);
+			expect(await connector.check("alice", "settings", "delete")).toBe(true);
+		});
+
+		test("is idempotent when called multiple times with the same rules", async () => {
+			const rules = [{ policies: [{ subject: "alice", object: "document", action: "read" }] }];
+			await connector.initialize(rules);
+			await connector.initialize(rules);
+			const { entities } = await connector.getAllPolicies();
+			expect(entities).toHaveLength(1);
+		});
+
+		test("empty rule sets produce no changes", async () => {
+			await connector.initialize([{}, {}]);
+			const { entities } = await connector.getAllPolicies();
+			expect(entities).toHaveLength(0);
+		});
 	});
 
 	describe("addPolicy / getAllPolicies", () => {

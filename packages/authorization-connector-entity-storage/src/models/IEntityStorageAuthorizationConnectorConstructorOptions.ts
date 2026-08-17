@@ -19,9 +19,9 @@ export interface IEntityStorageAuthorizationConnectorConstructorOptions {
 
 	/**
 	 * The entity storage type for authorization role assignments.
-	 * @default "authorization-role"
+	 * @default "authorization-role-assignment"
 	 */
-	authorizationRoleEntityStorageType?: string;
+	authorizationRoleAssignmentEntityStorageType?: string;
 
 	/**
 	 * The entity storage type for authorization role inheritance relationships.

@@ -6,7 +6,8 @@ import {
 	AuthorizationConnectorFactory,
 	type IAuthorizationComponent,
 	type IAuthorizationConnector,
-	type IAuthorizationPolicy
+	type IAuthorizationPolicy,
+	type IAuthorizationRules
 } from "@twin.org/authorization-models";
 import { ContextIdKeys, ContextIdStore } from "@twin.org/context";
 import { ComponentFactory, GeneralError, Guards, Is, LfuCache } from "@twin.org/core";
@@ -78,6 +79,23 @@ export class AuthorizationService implements IAuthorizationComponent {
 			return;
 		}
 		await MetricHelper.createMetrics(this._telemetryComponent, AUTHORIZATION_METRICS);
+	}
+
+	/**
+	 * Initialise the service with a default set of rules, applying policies, role assignments, and role inheritances.
+	 * @param rules The sets of rules to apply.
+	 * @returns Nothing.
+	 */
+	public async initialize(rules: IAuthorizationRules[]): Promise<void> {
+		try {
+			const connector = this.getConnector();
+			await connector.initialize(rules);
+			for (const key of this._checkCache.keys()) {
+				this._checkCache.delete(key);
+			}
+		} catch (error) {
+			throw new GeneralError(AuthorizationService.CLASS_NAME, "initializeFailed", undefined, error);
+		}
 	}
 
 	/**

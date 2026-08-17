@@ -2,11 +2,19 @@
 // SPDX-License-Identifier: Apache-2.0.
 import type { IComponent } from "@twin.org/core";
 import type { IAuthorizationPolicy } from "./IAuthorizationPolicy.js";
+import type { IAuthorizationRules } from "./IAuthorizationRules.js";
 
 /**
  * Interface describing an authorization component.
  */
 export interface IAuthorizationComponent extends IComponent {
+	/**
+	 * Initialise the component with a default set of rules, applying policies, role assignments, and role inheritances.
+	 * @param rules The sets of rules to apply.
+	 * @returns A promise that resolves when all rules have been applied.
+	 */
+	initialize(rules: IAuthorizationRules[]): Promise<void>;
+
 	/**
 	 * Check whether a subject is permitted to perform an action on a resource.
 	 * @param subject The subject requesting access.

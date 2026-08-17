@@ -6,6 +6,7 @@
 	},
 	"error": {
 		"casbinAuthorizationConnector": {
+			"initializeFailed": "Failed to initialise the authorization connector with the provided rules.",
 			"casbinConnectionFailed": "Failed to connect to Casbin server at \"{address}\".",
 			"invalidEnforcerId": "The enforcer ID \"{enforcerId}\" must be in 'owner/name' format.",
 			"checkFailed": "Failed to check authorization for subject \"{subject}\" on object \"{object}\" with action \"{action}\".",

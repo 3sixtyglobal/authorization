@@ -2,6 +2,7 @@
 	"error": {
 		"authorizationService": {
 			"noConnectors": "There are no connectors registered with the authorization factory",
+			"initializeFailed": "The initialisation of the authorization rules failed",
 			"checkFailed": "The authorization check failed",
 			"addPolicyFailed": "The addition of the policy failed",
 			"removePolicyFailed": "The removal of the policy failed",

@@ -1,6 +1,10 @@
 // Copyright 2026 IOTA Stiftung.
 // SPDX-License-Identifier: Apache-2.0.
-import type { IAuthorizationConnector, IAuthorizationPolicy } from "@twin.org/authorization-models";
+import type {
+	IAuthorizationConnector,
+	IAuthorizationPolicy,
+	IAuthorizationRules
+} from "@twin.org/authorization-models";
 import { BaseError, GeneralError, Guards } from "@twin.org/core";
 import { ComparisonOperator, SortDirection } from "@twin.org/entity";
 import {
@@ -38,7 +42,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	 * The entity storage for authorization role assignments.
 	 * @internal
 	 */
-	private readonly _authorizationRoleEntityStorage: IEntityStorageConnector<AuthorizationRoleAssignment>;
+	private readonly _authorizationRoleAssignmentEntityStorage: IEntityStorageConnector<AuthorizationRoleAssignment>;
 
 	/**
 	 * The entity storage for authorization role inheritance relationships.
@@ -60,8 +64,8 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this._authorizationPolicyEntityStorage = EntityStorageConnectorFactory.get(
 			options?.authorizationPolicyEntityStorageType ?? "authorization-policy"
 		);
-		this._authorizationRoleEntityStorage = EntityStorageConnectorFactory.get(
-			options?.authorizationRoleEntityStorageType ?? "authorization-role"
+		this._authorizationRoleAssignmentEntityStorage = EntityStorageConnectorFactory.get(
+			options?.authorizationRoleAssignmentEntityStorageType ?? "authorization-role-assignment"
 		);
 		this._authorizationRoleInheritanceEntityStorage = EntityStorageConnectorFactory.get(
 			options?.authorizationRoleInheritanceEntityStorageType ?? "authorization-role-inheritance"
@@ -77,6 +81,38 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	 */
 	public className(): string {
 		return EntityStorageAuthorizationConnector.CLASS_NAME;
+	}
+
+	/**
+	 * Initialise the connector with a default set of rules, applying policies, role assignments, and role inheritances.
+	 * @param rules The sets of rules to apply.
+	 * @returns Nothing.
+	 * @throws GeneralError if any rule cannot be applied.
+	 */
+	public async initialize(rules: IAuthorizationRules[]): Promise<void> {
+		try {
+			for (const ruleset of rules) {
+				for (const policy of ruleset.policies ?? []) {
+					await this.addPolicy(policy);
+				}
+				for (const assignment of ruleset.roleAssignments ?? []) {
+					await this.addRoleForSubject(assignment.subject, assignment.role);
+				}
+				for (const inheritance of ruleset.roleInheritances ?? []) {
+					await this.addRoleInheritance(inheritance.role, inheritance.parentRole);
+				}
+			}
+		} catch (err) {
+			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
+				throw err;
+			}
+			throw new GeneralError(
+				EntityStorageAuthorizationConnector.CLASS_NAME,
+				"initializeFailed",
+				undefined,
+				err
+			);
+		}
 	}
 
 	/**
@@ -100,7 +136,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 				return true;
 			}
 
-			const roleResult = await this._authorizationRoleEntityStorage.query(
+			const roleResult = await this._authorizationRoleAssignmentEntityStorage.query(
 				{ property: "subject", value: subject, comparison: ComparisonOperator.Equals },
 				undefined,
 				["role"]
@@ -369,7 +405,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 			const roleName = new AuthorizationRoleName();
 			roleName.id = role;
 			await Promise.all([
-				this._authorizationRoleEntityStorage.set(assignment),
+				this._authorizationRoleAssignmentEntityStorage.set(assignment),
 				this._authorizationRoleNameEntityStorage.set(roleName)
 			]);
 		} catch (err) {
@@ -397,7 +433,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(role), role);
 
 		try {
-			await this._authorizationRoleEntityStorage.remove(this.roleId(subject, role));
+			await this._authorizationRoleAssignmentEntityStorage.remove(this.roleId(subject, role));
 			await this.removeRoleNameIfUnreferenced(role);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
@@ -422,7 +458,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
 
 		try {
-			const result = await this._authorizationRoleEntityStorage.query(
+			const result = await this._authorizationRoleAssignmentEntityStorage.query(
 				{ property: "subject", value: subject, comparison: ComparisonOperator.Equals },
 				undefined,
 				["id", "role"]
@@ -430,7 +466,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 			const ids = result.entities.map(e => e.id).filter((id): id is string => id !== undefined);
 			const roles = result.entities.map(e => e.role).filter((r): r is string => r !== undefined);
 			if (ids.length > 0) {
-				await this._authorizationRoleEntityStorage.removeBatch(ids);
+				await this._authorizationRoleAssignmentEntityStorage.removeBatch(ids);
 				await Promise.all(roles.map(async r => this.removeRoleNameIfUnreferenced(r)));
 			}
 		} catch (err) {
@@ -456,7 +492,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
 
 		try {
-			const result = await this._authorizationRoleEntityStorage.query(
+			const result = await this._authorizationRoleAssignmentEntityStorage.query(
 				{ property: "subject", value: subject, comparison: ComparisonOperator.Equals },
 				undefined,
 				["role"]
@@ -485,7 +521,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(role), role);
 
 		try {
-			const result = await this._authorizationRoleEntityStorage.query(
+			const result = await this._authorizationRoleAssignmentEntityStorage.query(
 				{ property: "role", value: role, comparison: ComparisonOperator.Equals },
 				undefined,
 				["subject"]
@@ -516,7 +552,9 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(role), role);
 
 		try {
-			const entity = await this._authorizationRoleEntityStorage.get(this.roleId(subject, role));
+			const entity = await this._authorizationRoleAssignmentEntityStorage.get(
+				this.roleId(subject, role)
+			);
 			return entity !== undefined;
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
@@ -708,7 +746,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	 */
 	private async removeRoleNameIfUnreferenced(roleName: string): Promise<void> {
 		const [assignmentResult, inheritanceChildResult, inheritanceParentResult] = await Promise.all([
-			this._authorizationRoleEntityStorage.query(
+			this._authorizationRoleAssignmentEntityStorage.query(
 				{ property: "role", value: roleName, comparison: ComparisonOperator.Equals },
 				undefined,
 				["id"],

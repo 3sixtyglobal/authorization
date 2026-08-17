@@ -70,7 +70,7 @@ export class AuthorizationProcessor implements IBaseRouteProcessor {
 		contextIds: IContextIds,
 		processorState: { [id: string]: unknown }
 	): Promise<void> {
-		if (!Is.empty(route) && !(route.skipAuthorization ?? false)) {
+		if (!Is.empty(route) && !(route.requiresAuthorization ?? true)) {
 			try {
 				const userId = contextIds[ContextIdKeys.User];
 				if (!Is.stringValue(userId)) {
