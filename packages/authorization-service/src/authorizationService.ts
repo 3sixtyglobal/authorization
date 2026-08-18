@@ -10,7 +10,7 @@ import {
 	type IAuthorizationRules
 } from "@twin.org/authorization-models";
 import { ContextIdKeys, ContextIdStore } from "@twin.org/context";
-import { ComponentFactory, GeneralError, Guards, Is, LfuCache } from "@twin.org/core";
+import { ComponentFactory, GeneralError, Guards, Is, LfuCache, SharedStore } from "@twin.org/core";
 import { nameof } from "@twin.org/nameof";
 import { MetricHelper, type ITelemetryComponent } from "@twin.org/telemetry-models";
 import type { IAuthorizationServiceConstructorOptions } from "./models/IAuthorizationServiceConstructorOptions.js";
@@ -75,6 +75,19 @@ export class AuthorizationService implements IAuthorizationComponent {
 	 * Registers the authorization metrics with the telemetry component.
 	 */
 	public async start(): Promise<void> {
+		// If a migration of the roles from the old authenticated users has just happened
+		// the old roles will be stored in the SharedStore, if they exist then we need
+		// to populate them in the authorization service.
+		const migratedRoles = SharedStore.get<{ [id: string]: string[] }>("migrationUserRoles") ?? {};
+		if (Is.objectValue(migratedRoles)) {
+			for (const [subject, roles] of Object.entries(migratedRoles)) {
+				for (const role of roles) {
+					await this.addRoleForSubject(subject, role);
+				}
+			}
+			SharedStore.remove("migrationUserRoles");
+		}
+
 		if (Is.undefined(this._telemetryComponent)) {
 			return;
 		}
