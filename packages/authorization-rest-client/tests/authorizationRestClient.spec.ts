@@ -1,6 +1,6 @@
 // Copyright 2026 IOTA Stiftung.
 // SPDX-License-Identifier: Apache-2.0.
-import type { IAuthorizationPolicy, IAuthorizationRules } from "@twin.org/authorization-models";
+import type { IAuthorizationPolicy } from "@twin.org/authorization-models";
 import { GuardError } from "@twin.org/core";
 import { HttpMethod } from "@twin.org/web";
 import { AuthorizationRestClient } from "../src/authorizationRestClient.js";
@@ -22,7 +22,6 @@ const ROLE = "admin";
 const PARENT_ROLE = "viewer";
 
 const TEST_POLICY: IAuthorizationPolicy = { subject: SUBJECT, object: OBJECT, action: ACTION };
-const TEST_RULES: IAuthorizationRules[] = [{ policies: [TEST_POLICY] }];
 
 const fetchMock = vi.fn();
 
@@ -40,36 +39,6 @@ describe("AuthorizationRestClient", () => {
 
 	test("class name is set", () => {
 		expect(client.className()).toBe("AuthorizationRestClient");
-	});
-
-	describe("initialize", () => {
-		test("sends POST to /{prefix}/initialize", async () => {
-			fetchMock.mockResolvedValueOnce(noContentResponse());
-
-			await client.initialize(TEST_RULES);
-
-			const [url, options] = fetchMock.mock.calls[0];
-			expect(url).toBe(`${ENDPOINT}/${PREFIX}/initialize`);
-			expect(options.method).toBe(HttpMethod.POST);
-		});
-
-		test("sends rules in the request body", async () => {
-			fetchMock.mockResolvedValueOnce(noContentResponse());
-
-			await client.initialize(TEST_RULES);
-
-			const [, options] = fetchMock.mock.calls[0];
-			const body = JSON.parse(options.body);
-			expect(body.rules).toEqual(TEST_RULES);
-		});
-
-		test("resolves without a return value", async () => {
-			fetchMock.mockResolvedValueOnce(noContentResponse());
-
-			const result = await client.initialize(TEST_RULES);
-
-			expect(result).toBeUndefined();
-		});
 	});
 
 	describe("check", () => {

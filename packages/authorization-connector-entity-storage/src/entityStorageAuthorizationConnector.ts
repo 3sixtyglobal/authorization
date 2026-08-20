@@ -1,10 +1,6 @@
 // Copyright 2026 IOTA Stiftung.
 // SPDX-License-Identifier: Apache-2.0.
-import type {
-	IAuthorizationConnector,
-	IAuthorizationPolicy,
-	IAuthorizationRules
-} from "@twin.org/authorization-models";
+import type { IAuthorizationConnector, IAuthorizationPolicy } from "@twin.org/authorization-models";
 import { BaseError, GeneralError, Guards } from "@twin.org/core";
 import { ComparisonOperator, SortDirection } from "@twin.org/entity";
 import {
@@ -81,38 +77,6 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	 */
 	public className(): string {
 		return EntityStorageAuthorizationConnector.CLASS_NAME;
-	}
-
-	/**
-	 * Initialise the connector with a default set of rules, applying policies, role assignments, and role inheritances.
-	 * @param rules The sets of rules to apply.
-	 * @returns Nothing.
-	 * @throws GeneralError if any rule cannot be applied.
-	 */
-	public async initialize(rules: IAuthorizationRules[]): Promise<void> {
-		try {
-			for (const ruleset of rules) {
-				for (const policy of ruleset.policies ?? []) {
-					await this.addPolicy(policy);
-				}
-				for (const assignment of ruleset.roleAssignments ?? []) {
-					await this.addRoleForSubject(assignment.subject, assignment.role);
-				}
-				for (const inheritance of ruleset.roleInheritances ?? []) {
-					await this.addRoleInheritance(inheritance.role, inheritance.parentRole);
-				}
-			}
-		} catch (err) {
-			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
-				throw err;
-			}
-			throw new GeneralError(
-				EntityStorageAuthorizationConnector.CLASS_NAME,
-				"initializeFailed",
-				undefined,
-				err
-			);
-		}
 	}
 
 	/**

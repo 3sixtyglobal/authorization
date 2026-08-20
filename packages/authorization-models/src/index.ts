@@ -24,7 +24,6 @@ export * from "./models/api/IAuthorizationGetSubjectsForRoleRequest.js";
 export * from "./models/api/IAuthorizationGetSubjectsForRoleResponse.js";
 export * from "./models/api/IAuthorizationHasRoleForSubjectRequest.js";
 export * from "./models/api/IAuthorizationHasRoleForSubjectResponse.js";
-export * from "./models/api/IAuthorizationInitializeRequest.js";
 export * from "./models/api/IAuthorizationRemoveAllRolesForSubjectRequest.js";
 export * from "./models/api/IAuthorizationRemovePolicyRequest.js";
 export * from "./models/api/IAuthorizationRemoveRoleForSubjectRequest.js";

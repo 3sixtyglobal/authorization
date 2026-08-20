@@ -107,17 +107,23 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 		return userId !== undefined ? { [ContextIdKeys.User]: userId } : {};
 	}
 
-	async function initialize(rules: IAuthorizationRules[]): Promise<void> {
-		await service.initialize(rules);
+	async function initialize(rules: IAuthorizationRules): Promise<void> {
+		for (const policy of rules.policies ?? []) {
+			await service.addPolicy(policy);
+		}
+		for (const assignment of rules.roleAssignments ?? []) {
+			await service.addRoleForSubject(assignment.subject, assignment.role);
+		}
+		for (const inheritance of rules.roleInheritances ?? []) {
+			await service.addRoleInheritance(inheritance.role, inheritance.parentRole);
+		}
 	}
 
 	describe("direct userId policy", () => {
 		test("allows when the userId has a direct execute policy for the operationId", async () => {
-			await initialize([
-				{
-					policies: [{ subject: "user-alice", object: "documentUpdate", action: "execute" }]
-				}
-			]);
+			await initialize({
+				policies: [{ subject: "user-alice", object: "documentUpdate", action: "execute" }]
+			});
 
 			const response = makeResponse();
 			await processor.pre(
@@ -132,11 +138,9 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 		});
 
 		test("denies when the userId has no execute policy for the operationId", async () => {
-			await initialize([
-				{
-					policies: [{ subject: "user-alice", object: "documentUpdate", action: "execute" }]
-				}
-			]);
+			await initialize({
+				policies: [{ subject: "user-alice", object: "documentUpdate", action: "execute" }]
+			});
 
 			const response = makeResponse();
 			await processor.pre(
@@ -153,12 +157,10 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 
 	describe("userId via role assignment", () => {
 		test("allows when the userId is assigned a role with a matching policy", async () => {
-			await initialize([
-				{
-					policies: [{ subject: "editor", object: "reportRead", action: "execute" }],
-					roleAssignments: [{ subject: "user-alice", role: "editor" }]
-				}
-			]);
+			await initialize({
+				policies: [{ subject: "editor", object: "reportRead", action: "execute" }],
+				roleAssignments: [{ subject: "user-alice", role: "editor" }]
+			});
 
 			const response = makeResponse();
 			await processor.pre(
@@ -173,12 +175,10 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 		});
 
 		test("denies when the userId's assigned role has no policy for the operationId", async () => {
-			await initialize([
-				{
-					policies: [{ subject: "admin", object: "reportDelete", action: "execute" }],
-					roleAssignments: [{ subject: "user-alice", role: "editor" }]
-				}
-			]);
+			await initialize({
+				policies: [{ subject: "admin", object: "reportDelete", action: "execute" }],
+				roleAssignments: [{ subject: "user-alice", role: "editor" }]
+			});
 
 			const response = makeResponse();
 			await processor.pre(
@@ -193,15 +193,13 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 		});
 
 		test("allows when one of the userId's multiple assigned roles has a matching policy", async () => {
-			await initialize([
-				{
-					policies: [{ subject: "admin", object: "settingsWrite", action: "execute" }],
-					roleAssignments: [
-						{ subject: "user-bob", role: "viewer" },
-						{ subject: "user-bob", role: "admin" }
-					]
-				}
-			]);
+			await initialize({
+				policies: [{ subject: "admin", object: "settingsWrite", action: "execute" }],
+				roleAssignments: [
+					{ subject: "user-bob", role: "viewer" },
+					{ subject: "user-bob", role: "admin" }
+				]
+			});
 
 			const response = makeResponse();
 			await processor.pre(
@@ -216,15 +214,13 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 		});
 
 		test("denies when all of the userId's assigned roles lack a policy for the operationId", async () => {
-			await initialize([
-				{
-					policies: [{ subject: "admin", object: "settingsWrite", action: "execute" }],
-					roleAssignments: [
-						{ subject: "user-bob", role: "viewer" },
-						{ subject: "user-bob", role: "editor" }
-					]
-				}
-			]);
+			await initialize({
+				policies: [{ subject: "admin", object: "settingsWrite", action: "execute" }],
+				roleAssignments: [
+					{ subject: "user-bob", role: "viewer" },
+					{ subject: "user-bob", role: "editor" }
+				]
+			});
 
 			const response = makeResponse();
 			await processor.pre(
@@ -238,17 +234,17 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 			expect(response.statusCode).toBe(HttpStatusCode.unauthorized);
 		});
 
-		test("applies rules from multiple rule sets in a single initialize call", async () => {
-			await initialize([
-				{
-					policies: [{ subject: "viewer", object: "reportRead", action: "execute" }],
-					roleAssignments: [{ subject: "user-carol", role: "viewer" }]
-				},
-				{
-					policies: [{ subject: "editor", object: "reportWrite", action: "execute" }],
-					roleAssignments: [{ subject: "user-carol", role: "editor" }]
-				}
-			]);
+		test("applies multiple policies and role assignments in a single initialize call", async () => {
+			await initialize({
+				policies: [
+					{ subject: "viewer", object: "reportRead", action: "execute" },
+					{ subject: "editor", object: "reportWrite", action: "execute" }
+				],
+				roleAssignments: [
+					{ subject: "user-carol", role: "viewer" },
+					{ subject: "user-carol", role: "editor" }
+				]
+			});
 
 			const readResponse = makeResponse();
 			await processor.pre(
@@ -276,13 +272,11 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 		test("allows when the userId's role inherits from a parent role that has the policy", async () => {
 			// user-alice → "admin" (roleAssignment), admin inherits "superAdmin" (roleInheritance),
 			// superAdmin holds the policy.
-			await initialize([
-				{
-					policies: [{ subject: "superAdmin", object: "tenantDelete", action: "execute" }],
-					roleAssignments: [{ subject: "user-alice", role: "admin" }],
-					roleInheritances: [{ role: "admin", parentRole: "superAdmin" }]
-				}
-			]);
+			await initialize({
+				policies: [{ subject: "superAdmin", object: "tenantDelete", action: "execute" }],
+				roleAssignments: [{ subject: "user-alice", role: "admin" }],
+				roleInheritances: [{ role: "admin", parentRole: "superAdmin" }]
+			});
 
 			const response = makeResponse();
 			await processor.pre(
@@ -299,16 +293,14 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 		test("allows via a deep roleInheritance chain from the userId's assigned role", async () => {
 			// user-dave → "operator" (roleAssignment), operator inherits "manager" (roleInheritance),
 			// manager inherits "root" (roleInheritance), root holds the policy.
-			await initialize([
-				{
-					policies: [{ subject: "root", object: "systemReset", action: "execute" }],
-					roleAssignments: [{ subject: "user-dave", role: "operator" }],
-					roleInheritances: [
-						{ role: "operator", parentRole: "manager" },
-						{ role: "manager", parentRole: "root" }
-					]
-				}
-			]);
+			await initialize({
+				policies: [{ subject: "root", object: "systemReset", action: "execute" }],
+				roleAssignments: [{ subject: "user-dave", role: "operator" }],
+				roleInheritances: [
+					{ role: "operator", parentRole: "manager" },
+					{ role: "manager", parentRole: "root" }
+				]
+			});
 
 			const response = makeResponse();
 			await processor.pre(
@@ -323,12 +315,10 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 		});
 
 		test("denies when no chain from the userId leads to a matching policy", async () => {
-			await initialize([
-				{
-					policies: [{ subject: "superAdmin", object: "tenantDelete", action: "execute" }],
-					roleAssignments: [{ subject: "user-alice", role: "editor" }]
-				}
-			]);
+			await initialize({
+				policies: [{ subject: "superAdmin", object: "tenantDelete", action: "execute" }],
+				roleAssignments: [{ subject: "user-alice", role: "editor" }]
+			});
 
 			const response = makeResponse();
 			await processor.pre(
@@ -344,16 +334,14 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 
 		test("allows when one of the userId's role chains satisfies while another does not", async () => {
 			// user-eve has two roles: "viewer" (no chain to policy) and "admin" (inherits superAdmin).
-			await initialize([
-				{
-					policies: [{ subject: "superAdmin", object: "auditPurge", action: "execute" }],
-					roleAssignments: [
-						{ subject: "user-eve", role: "viewer" },
-						{ subject: "user-eve", role: "admin" }
-					],
-					roleInheritances: [{ role: "admin", parentRole: "superAdmin" }]
-				}
-			]);
+			await initialize({
+				policies: [{ subject: "superAdmin", object: "auditPurge", action: "execute" }],
+				roleAssignments: [
+					{ subject: "user-eve", role: "viewer" },
+					{ subject: "user-eve", role: "admin" }
+				],
+				roleInheritances: [{ role: "admin", parentRole: "superAdmin" }]
+			});
 
 			const response = makeResponse();
 			await processor.pre(
@@ -383,7 +371,7 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 		});
 
 		test("applies the check and denies when requiresAuthorization is true and no policy matches", async () => {
-			await initialize([]);
+			await initialize({});
 
 			const response = makeResponse();
 			await processor.pre(
@@ -405,7 +393,7 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 		});
 
 		test("denies when contextIds has no userId and no defaultRole is configured", async () => {
-			await initialize([]);
+			await initialize({});
 
 			const response = makeResponse();
 			await processor.pre(makeRequest(), response, makeRoute("secureAction"), makeContextIds(), {});
@@ -416,11 +404,9 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 
 	describe("defaultRole fallback", () => {
 		test("uses the configured defaultRole when contextIds carries no userId", async () => {
-			await initialize([
-				{
-					policies: [{ subject: "guest", object: "homeView", action: "execute" }]
-				}
-			]);
+			await initialize({
+				policies: [{ subject: "guest", object: "homeView", action: "execute" }]
+			});
 
 			processor = new AuthorizationProcessor({ config: { defaultRole: "guest" } });
 
@@ -431,11 +417,9 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 		});
 
 		test("denies when contextIds carries no userId and the defaultRole has no matching policy", async () => {
-			await initialize([
-				{
-					policies: [{ subject: "admin", object: "adminPanel", action: "execute" }]
-				}
-			]);
+			await initialize({
+				policies: [{ subject: "admin", object: "adminPanel", action: "execute" }]
+			});
 
 			processor = new AuthorizationProcessor({ config: { defaultRole: "guest" } });
 
@@ -446,12 +430,10 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 		});
 
 		test("prefers the userId over the defaultRole when userId is present", async () => {
-			await initialize([
-				{
-					policies: [{ subject: "editor", object: "docWrite", action: "execute" }],
-					roleAssignments: [{ subject: "user-alice", role: "editor" }]
-				}
-			]);
+			await initialize({
+				policies: [{ subject: "editor", object: "docWrite", action: "execute" }],
+				roleAssignments: [{ subject: "user-alice", role: "editor" }]
+			});
 
 			processor = new AuthorizationProcessor({ config: { defaultRole: "guest" } });
 

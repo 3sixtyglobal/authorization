@@ -31,6 +31,12 @@ export class AuthorizationService implements IAuthorizationComponent {
 	private readonly _defaultNamespace: string;
 
 	/**
+	 * The optional set of rules to apply when the service starts.
+	 * @internal
+	 */
+	private readonly _defaultRules?: IAuthorizationRules;
+
+	/**
 	 * The optional telemetry component for recording metrics.
 	 * @internal
 	 */
@@ -54,6 +60,7 @@ export class AuthorizationService implements IAuthorizationComponent {
 		}
 
 		this._defaultNamespace = options?.config?.defaultNamespace ?? names[0];
+		this._defaultRules = options?.config?.defaultRules;
 		this._telemetryComponent = ComponentFactory.getIfExists<ITelemetryComponent>(
 			options?.telemetryComponentType
 		);
@@ -72,9 +79,28 @@ export class AuthorizationService implements IAuthorizationComponent {
 	}
 
 	/**
-	 * Registers the authorization metrics with the telemetry component.
+	 * Start the service, applying default rules and registering telemetry metrics.
 	 */
 	public async start(): Promise<void> {
+		if (!Is.undefined(this._defaultRules)) {
+			const connector = this.getConnector();
+			if (Is.arrayValue(this._defaultRules.policies)) {
+				for (const policy of this._defaultRules.policies) {
+					await connector.addPolicy(policy);
+				}
+			}
+			if (Is.arrayValue(this._defaultRules.roleAssignments)) {
+				for (const assignment of this._defaultRules.roleAssignments) {
+					await connector.addRoleForSubject(assignment.subject, assignment.role);
+				}
+			}
+			if (Is.arrayValue(this._defaultRules.roleInheritances)) {
+				for (const inheritance of this._defaultRules.roleInheritances) {
+					await connector.addRoleInheritance(inheritance.role, inheritance.parentRole);
+				}
+			}
+		}
+
 		// If a migration of the roles from the old authenticated users has just happened
 		// the old roles will be stored in the SharedStore, if they exist then we need
 		// to populate them in the authorization service.
@@ -92,21 +118,6 @@ export class AuthorizationService implements IAuthorizationComponent {
 			return;
 		}
 		await MetricHelper.createMetrics(this._telemetryComponent, AUTHORIZATION_METRICS);
-	}
-
-	/**
-	 * Initialise the service with a default set of rules, applying policies, role assignments, and role inheritances.
-	 * @param rules The sets of rules to apply.
-	 * @returns Nothing.
-	 */
-	public async initialize(rules: IAuthorizationRules[]): Promise<void> {
-		try {
-			const connector = this.getConnector();
-			await connector.initialize(rules);
-			this._checkCache.clear();
-		} catch (error) {
-			throw new GeneralError(AuthorizationService.CLASS_NAME, "initializeFailed", undefined, error);
-		}
 	}
 
 	/**
