@@ -89,14 +89,9 @@ export class AuthorizationService implements IAuthorizationComponent {
 					await connector.addPolicy(policy);
 				}
 			}
-			if (Is.arrayValue(this._defaultRules.roleAssignments)) {
-				for (const assignment of this._defaultRules.roleAssignments) {
-					await connector.addRoleForSubject(assignment.subject, assignment.role);
-				}
-			}
 			if (Is.arrayValue(this._defaultRules.roleInheritances)) {
 				for (const inheritance of this._defaultRules.roleInheritances) {
-					await connector.addRoleInheritance(inheritance.role, inheritance.parentRole);
+					await connector.addRoleInheritance(inheritance.role, inheritance.inheritsFrom);
 				}
 			}
 		}
@@ -476,16 +471,16 @@ export class AuthorizationService implements IAuthorizationComponent {
 	/**
 	 * Define a parent-child inheritance relationship between two roles.
 	 * @param role The child role that will inherit permissions from the parent.
-	 * @param parentRole The parent role whose permissions are inherited.
+	 * @param inheritsFrom The parent role whose permissions are inherited.
 	 * @returns Nothing.
 	 */
-	public async addRoleInheritance(role: string, parentRole: string): Promise<void> {
+	public async addRoleInheritance(role: string, inheritsFrom: string): Promise<void> {
 		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(role), role);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(parentRole), parentRole);
+		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(inheritsFrom), inheritsFrom);
 
 		try {
 			const connector = this.getConnector();
-			await connector.addRoleInheritance(role, parentRole);
+			await connector.addRoleInheritance(role, inheritsFrom);
 			await this.invalidateCacheByPrefix(role);
 
 			await MetricHelper.metricIncrement(
@@ -505,16 +500,16 @@ export class AuthorizationService implements IAuthorizationComponent {
 	/**
 	 * Remove a parent-child inheritance relationship between two roles.
 	 * @param role The child role.
-	 * @param parentRole The parent role to stop inheriting from.
+	 * @param inheritsFrom The parent role to stop inheriting from.
 	 * @returns Nothing.
 	 */
-	public async removeRoleInheritance(role: string, parentRole: string): Promise<void> {
+	public async removeRoleInheritance(role: string, inheritsFrom: string): Promise<void> {
 		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(role), role);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(parentRole), parentRole);
+		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(inheritsFrom), inheritsFrom);
 
 		try {
 			const connector = this.getConnector();
-			await connector.removeRoleInheritance(role, parentRole);
+			await connector.removeRoleInheritance(role, inheritsFrom);
 			await this.invalidateCacheByPrefix(role);
 
 			await MetricHelper.metricIncrement(

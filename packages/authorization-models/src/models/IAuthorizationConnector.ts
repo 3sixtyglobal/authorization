@@ -117,18 +117,18 @@ export interface IAuthorizationConnector extends IComponent {
 	/**
 	 * Define a parent-child inheritance relationship between two roles.
 	 * @param role The child role that will inherit permissions from the parent.
-	 * @param parentRole The parent role whose permissions are inherited.
+	 * @param inheritsFrom The parent role whose permissions are inherited.
 	 * @returns A promise that resolves when the role inheritance has been added.
 	 */
-	addRoleInheritance(role: string, parentRole: string): Promise<void>;
+	addRoleInheritance(role: string, inheritsFrom: string): Promise<void>;
 
 	/**
 	 * Remove a parent-child inheritance relationship between two roles.
 	 * @param role The child role.
-	 * @param parentRole The parent role to stop inheriting from.
+	 * @param inheritsFrom The parent role to stop inheriting from.
 	 * @returns A promise that resolves when the role inheritance has been removed.
 	 */
-	removeRoleInheritance(role: string, parentRole: string): Promise<void>;
+	removeRoleInheritance(role: string, inheritsFrom: string): Promise<void>;
 
 	/**
 	 * Get all roles that a given role directly inherits from.

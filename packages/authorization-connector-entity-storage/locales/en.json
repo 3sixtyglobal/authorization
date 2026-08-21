@@ -14,8 +14,8 @@
 			"getRolesForSubjectFailed": "Failed to retrieve roles for subject \"{subject}\".",
 			"getSubjectsForRoleFailed": "Failed to retrieve subjects for role \"{role}\".",
 			"hasRoleForSubjectFailed": "Failed to check role \"{role}\" for subject \"{subject}\".",
-			"addRoleInheritanceFailed": "Failed to add inheritance from role \"{parentRole}\" to role \"{role}\".",
-			"removeRoleInheritanceFailed": "Failed to remove inheritance from role \"{parentRole}\" from role \"{role}\".",
+			"addRoleInheritanceFailed": "Failed to add inheritance from role \"{inheritsFrom}\" to role \"{role}\".",
+			"removeRoleInheritanceFailed": "Failed to remove inheritance from role \"{inheritsFrom}\" from role \"{role}\".",
 			"getParentRolesFailed": "Failed to retrieve parent roles for role \"{role}\".",
 			"getChildRolesFailed": "Failed to retrieve child roles for role \"{role}\"."
 		}

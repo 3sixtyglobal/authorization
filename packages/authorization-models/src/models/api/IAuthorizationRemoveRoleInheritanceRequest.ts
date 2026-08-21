@@ -17,6 +17,6 @@ export interface IAuthorizationRemoveRoleInheritanceRequest {
 		/**
 		 * The parent role to remove.
 		 */
-		parentRole: string;
+		inheritsFrom: string;
 	};
 }

@@ -1326,7 +1326,7 @@
 							"examples": {
 								"authorizationAddRoleInheritanceExample": {
 									"value": {
-										"parentRole": "viewer"
+										"inheritsFrom": "viewer"
 									}
 								}
 							}
@@ -1397,7 +1397,7 @@
 				}
 			}
 		},
-		"/authorization/role/{role}/inherit/{parentRole}": {
+		"/authorization/role/{role}/inherit/{inheritsFrom}": {
 			"delete": {
 				"operationId": "authorizationRemoveRoleInheritance",
 				"summary": "Remove a role inheritance",
@@ -1417,7 +1417,7 @@
 						"example": "editor"
 					},
 					{
-						"name": "parentRole",
+						"name": "inheritsFrom",
 						"description": "The parent role to remove.",
 						"in": "path",
 						"required": true,
@@ -1727,13 +1727,13 @@
 			"AuthorizationAddRoleInheritanceRequest": {
 				"type": "object",
 				"properties": {
-					"parentRole": {
+					"inheritsFrom": {
 						"type": "string",
 						"description": "The parent role to inherit from."
 					}
 				},
 				"required": [
-					"parentRole"
+					"inheritsFrom"
 				],
 				"description": "The request data."
 			},

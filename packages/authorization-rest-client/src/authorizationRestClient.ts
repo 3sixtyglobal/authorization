@@ -300,34 +300,34 @@ export class AuthorizationRestClient extends BaseRestClient implements IAuthoriz
 	/**
 	 * Define a parent-child inheritance relationship between two roles.
 	 * @param role The child role that will inherit permissions from the parent.
-	 * @param parentRole The parent role whose permissions are inherited.
+	 * @param inheritsFrom The parent role whose permissions are inherited.
 	 * @returns Nothing.
 	 */
-	public async addRoleInheritance(role: string, parentRole: string): Promise<void> {
+	public async addRoleInheritance(role: string, inheritsFrom: string): Promise<void> {
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(role), role);
-		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(parentRole), parentRole);
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(inheritsFrom), inheritsFrom);
 
 		await this.fetch<IAuthorizationAddRoleInheritanceRequest, INoContentResponse>(
 			"/role/:role/inherit",
 			HttpMethod.POST,
-			{ pathParams: { role }, body: { parentRole } }
+			{ pathParams: { role }, body: { inheritsFrom } }
 		);
 	}
 
 	/**
 	 * Remove a parent-child inheritance relationship between two roles.
 	 * @param role The child role.
-	 * @param parentRole The parent role to stop inheriting from.
+	 * @param inheritsFrom The parent role to stop inheriting from.
 	 * @returns Nothing.
 	 */
-	public async removeRoleInheritance(role: string, parentRole: string): Promise<void> {
+	public async removeRoleInheritance(role: string, inheritsFrom: string): Promise<void> {
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(role), role);
-		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(parentRole), parentRole);
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(inheritsFrom), inheritsFrom);
 
 		await this.fetch<IAuthorizationRemoveRoleInheritanceRequest, INoContentResponse>(
-			"/role/:role/inherit/:parentRole",
+			"/role/:role/inherit/:inheritsFrom",
 			HttpMethod.DELETE,
-			{ pathParams: { role, parentRole } }
+			{ pathParams: { role, inheritsFrom } }
 		);
 	}
 

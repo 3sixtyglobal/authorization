@@ -747,13 +747,13 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	/**
 	 * Define a parent-child inheritance relationship between two roles.
 	 * @param role The child role that will inherit permissions from the parent.
-	 * @param parentRole The parent role whose permissions are inherited.
+	 * @param inheritsFrom The parent role whose permissions are inherited.
 	 * @returns Nothing.
 	 * @throws GeneralError if the request fails.
 	 */
-	public async addRoleInheritance(role: string, parentRole: string): Promise<void> {
+	public async addRoleInheritance(role: string, inheritsFrom: string): Promise<void> {
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(parentRole), parentRole);
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(inheritsFrom), inheritsFrom);
 
 		try {
 			const tenantId = await this.getTenantId();
@@ -767,12 +767,12 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 				{
 					ptype: "g",
 					v0: this.applyTenant(tenantId, role),
-					v1: this.applyTenant(tenantId, parentRole)
+					v1: this.applyTenant(tenantId, inheritsFrom)
 				},
 				this._requestOptions
 			);
 
-			this.assertOk(response, "addRoleInheritanceFailed", { role, parentRole });
+			this.assertOk(response, "addRoleInheritanceFailed", { role, inheritsFrom });
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -780,7 +780,7 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 			throw new GeneralError(
 				CasbinAuthorizationConnector.CLASS_NAME,
 				"addRoleInheritanceFailed",
-				{ role, parentRole },
+				{ role, inheritsFrom },
 				err
 			);
 		}
@@ -789,13 +789,13 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	/**
 	 * Remove a parent-child inheritance relationship between two roles.
 	 * @param role The child role.
-	 * @param parentRole The parent role to stop inheriting from.
+	 * @param inheritsFrom The parent role to stop inheriting from.
 	 * @returns Nothing.
 	 * @throws GeneralError if the request fails.
 	 */
-	public async removeRoleInheritance(role: string, parentRole: string): Promise<void> {
+	public async removeRoleInheritance(role: string, inheritsFrom: string): Promise<void> {
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(parentRole), parentRole);
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(inheritsFrom), inheritsFrom);
 
 		try {
 			const tenantId = await this.getTenantId();
@@ -809,12 +809,12 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 				{
 					ptype: "g",
 					v0: this.applyTenant(tenantId, role),
-					v1: this.applyTenant(tenantId, parentRole)
+					v1: this.applyTenant(tenantId, inheritsFrom)
 				},
 				this._requestOptions
 			);
 
-			this.assertOk(response, "removeRoleInheritanceFailed", { role, parentRole });
+			this.assertOk(response, "removeRoleInheritanceFailed", { role, inheritsFrom });
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -822,7 +822,7 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 			throw new GeneralError(
 				CasbinAuthorizationConnector.CLASS_NAME,
 				"removeRoleInheritanceFailed",
-				{ role, parentRole },
+				{ role, inheritsFrom },
 				err
 			);
 		}

@@ -524,7 +524,7 @@ describe("CasbinAuthorizationConnector", () => {
 			await expect(connector.addRoleInheritance("", "viewer")).rejects.toThrow();
 		});
 
-		test("throws when parentRole is empty for addRoleInheritance", async () => {
+		test("throws when inheritsFrom is empty for addRoleInheritance", async () => {
 			await expect(connector.addRoleInheritance("editor", "")).rejects.toThrow();
 		});
 

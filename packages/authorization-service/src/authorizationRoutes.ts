@@ -43,12 +43,21 @@ import { HttpStatusCode } from "@twin.org/web";
 const ROUTES_SOURCE = "authorizationRoutes";
 
 /**
- * The default authorization permissions for the routes, use to populate authorization rules.
+ * The default permissions for the routes, used to seed authorization rules.
  */
-const PERMISSIONS_DEFAULT_ROUTE_READER = "authorization:read";
-const PERMISSIONS_DEFAULT_ROUTE_WRITER = {
+const DEFAULT_ROUTE_PERMISSIONS_READER = "authorization:read";
+const DEFAULT_ROUTE_PERMISSIONS_WRITER = {
 	permission: "authorization:write",
-	inherits: [PERMISSIONS_DEFAULT_ROUTE_READER]
+	inherits: [DEFAULT_ROUTE_PERMISSIONS_READER]
+};
+
+/**
+ * The default roles for the routes, used to seed authorization rules.
+ */
+const DEFAULT_ROUTE_ROLES_READER = "authorization-viewer";
+const DEFAULT_ROUTE_ROLES_WRITER = {
+	role: "authorization-admin",
+	inherits: [DEFAULT_ROUTE_ROLES_READER]
 };
 
 /**
@@ -109,7 +118,8 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_READER]
+		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
+		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
 	};
 
 	const checkAnyRoute: IRestRoute<IAuthorizationCheckAnyRequest, IAuthorizationCheckAnyResponse> = {
@@ -150,7 +160,8 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_READER]
+		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
+		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
 	};
 
 	const addPolicyRoute: IRestRoute<IAuthorizationAddPolicyRequest, INoContentResponse> = {
@@ -189,7 +200,8 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_WRITER]
+		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_WRITER],
+		defaultRoles: [DEFAULT_ROUTE_ROLES_WRITER]
 	};
 
 	const removePolicyRoute: IRestRoute<IAuthorizationRemovePolicyRequest, INoContentResponse> = {
@@ -228,7 +240,8 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_WRITER]
+		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_WRITER],
+		defaultRoles: [DEFAULT_ROUTE_ROLES_WRITER]
 	};
 
 	const getAllPoliciesRoute: IRestRoute<
@@ -268,7 +281,8 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_READER]
+		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
+		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
 	};
 
 	const getAllRolesRoute: IRestRoute<
@@ -308,7 +322,8 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_READER]
+		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
+		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
 	};
 
 	const getPoliciesForSubjectRoute: IRestRoute<
@@ -350,7 +365,8 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_READER]
+		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
+		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
 	};
 
 	const addRoleForSubjectRoute: IRestRoute<
@@ -387,7 +403,8 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_WRITER]
+		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_WRITER],
+		defaultRoles: [DEFAULT_ROUTE_ROLES_WRITER]
 	};
 
 	const removeRoleForSubjectRoute: IRestRoute<
@@ -423,7 +440,8 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_WRITER]
+		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_WRITER],
+		defaultRoles: [DEFAULT_ROUTE_ROLES_WRITER]
 	};
 
 	const removeAllRolesForSubjectRoute: IRestRoute<
@@ -459,7 +477,8 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_WRITER]
+		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_WRITER],
+		defaultRoles: [DEFAULT_ROUTE_ROLES_WRITER]
 	};
 
 	const getRolesForSubjectRoute: IRestRoute<
@@ -497,7 +516,8 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_READER]
+		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
+		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
 	};
 
 	const hasRoleForSubjectRoute: IRestRoute<
@@ -535,7 +555,8 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_READER]
+		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
+		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
 	};
 
 	const getSubjectsForRoleRoute: IRestRoute<
@@ -573,7 +594,8 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_READER]
+		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
+		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
 	};
 
 	const addRoleInheritanceRoute: IRestRoute<
@@ -594,7 +616,7 @@ export function generateRestRoutesAuthorization(
 					id: "authorizationAddRoleInheritanceExample",
 					request: {
 						pathParams: { role: "editor" },
-						body: { parentRole: "viewer" }
+						body: { inheritsFrom: "viewer" }
 					}
 				}
 			]
@@ -610,7 +632,8 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_WRITER]
+		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_WRITER],
+		defaultRoles: [DEFAULT_ROUTE_ROLES_WRITER]
 	};
 
 	const removeRoleInheritanceRoute: IRestRoute<
@@ -621,7 +644,7 @@ export function generateRestRoutesAuthorization(
 		summary: "Remove a role inheritance",
 		tag: tagsAuthorization[0].name,
 		method: "DELETE",
-		path: `${baseRouteName}/role/:role/inherit/:parentRole`,
+		path: `${baseRouteName}/role/:role/inherit/:inheritsFrom`,
 		handler: async (httpRequestContext, request) =>
 			authorizationRemoveRoleInheritance(httpRequestContext, componentName, request),
 		requestType: {
@@ -630,7 +653,7 @@ export function generateRestRoutesAuthorization(
 				{
 					id: "authorizationRemoveRoleInheritanceExample",
 					request: {
-						pathParams: { role: "editor", parentRole: "viewer" }
+						pathParams: { role: "editor", inheritsFrom: "viewer" }
 					}
 				}
 			]
@@ -646,7 +669,8 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_WRITER]
+		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_WRITER],
+		defaultRoles: [DEFAULT_ROUTE_ROLES_WRITER]
 	};
 
 	const getParentRolesRoute: IRestRoute<
@@ -684,7 +708,8 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_READER]
+		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
+		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
 	};
 
 	const getChildRolesRoute: IRestRoute<
@@ -722,7 +747,8 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [PERMISSIONS_DEFAULT_ROUTE_READER]
+		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
+		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
 	};
 
 	return [
@@ -1133,10 +1159,10 @@ export async function authorizationAddRoleInheritance(
 		nameof(request.body),
 		request.body
 	);
-	Guards.stringValue(ROUTES_SOURCE, nameof(request.body.parentRole), request.body.parentRole);
+	Guards.stringValue(ROUTES_SOURCE, nameof(request.body.inheritsFrom), request.body.inheritsFrom);
 
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
-	await component.addRoleInheritance(request.pathParams.role, request.body.parentRole);
+	await component.addRoleInheritance(request.pathParams.role, request.body.inheritsFrom);
 
 	return { statusCode: HttpStatusCode.noContent };
 }
@@ -1166,12 +1192,12 @@ export async function authorizationRemoveRoleInheritance(
 	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.role), request.pathParams.role);
 	Guards.stringValue(
 		ROUTES_SOURCE,
-		nameof(request.pathParams.parentRole),
-		request.pathParams.parentRole
+		nameof(request.pathParams.inheritsFrom),
+		request.pathParams.inheritsFrom
 	);
 
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
-	await component.removeRoleInheritance(request.pathParams.role, request.pathParams.parentRole);
+	await component.removeRoleInheritance(request.pathParams.role, request.pathParams.inheritsFrom);
 
 	return { statusCode: HttpStatusCode.noContent };
 }

@@ -126,11 +126,11 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 					const parentResult = await this._authorizationRoleInheritanceEntityStorage.query(
 						{ property: "role", value: nextRole, comparison: ComparisonOperator.Equals },
 						undefined,
-						["parentRole"]
+						["inheritsFrom"]
 					);
 					for (const entry of parentResult.entities) {
-						if (entry.parentRole !== undefined && !visited.has(entry.parentRole)) {
-							queue.push(entry.parentRole);
+						if (entry.inheritsFrom !== undefined && !visited.has(entry.inheritsFrom)) {
+							queue.push(entry.inheritsFrom);
 						}
 					}
 				}
@@ -575,31 +575,31 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	/**
 	 * Define a parent-child inheritance relationship between two roles.
 	 * @param role The child role that will inherit permissions from the parent.
-	 * @param parentRole The parent role whose permissions are inherited.
+	 * @param inheritsFrom The parent role whose permissions are inherited.
 	 * @returns Nothing.
 	 * @throws GeneralError if the request fails.
 	 */
-	public async addRoleInheritance(role: string, parentRole: string): Promise<void> {
+	public async addRoleInheritance(role: string, inheritsFrom: string): Promise<void> {
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(role), role);
 		Guards.stringValue(
 			EntityStorageAuthorizationConnector.CLASS_NAME,
-			nameof(parentRole),
-			parentRole
+			nameof(inheritsFrom),
+			inheritsFrom
 		);
 
 		try {
 			const inheritance = new AuthorizationRoleInheritance();
-			inheritance.id = this.inheritanceId(role, parentRole);
+			inheritance.id = this.inheritanceId(role, inheritsFrom);
 			inheritance.role = role;
-			inheritance.parentRole = parentRole;
+			inheritance.inheritsFrom = inheritsFrom;
 			const roleNameEntity = new AuthorizationRoleName();
 			roleNameEntity.id = role;
-			const parentRoleNameEntity = new AuthorizationRoleName();
-			parentRoleNameEntity.id = parentRole;
+			const inheritsFromNameEntity = new AuthorizationRoleName();
+			inheritsFromNameEntity.id = inheritsFrom;
 			await Promise.all([
 				this._authorizationRoleInheritanceEntityStorage.set(inheritance),
 				this._authorizationRoleNameEntityStorage.set(roleNameEntity),
-				this._authorizationRoleNameEntityStorage.set(parentRoleNameEntity)
+				this._authorizationRoleNameEntityStorage.set(inheritsFromNameEntity)
 			]);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
@@ -608,7 +608,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 			throw new GeneralError(
 				EntityStorageAuthorizationConnector.CLASS_NAME,
 				"addRoleInheritanceFailed",
-				{ role, parentRole },
+				{ role, inheritsFrom },
 				err
 			);
 		}
@@ -617,25 +617,25 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	/**
 	 * Remove a parent-child inheritance relationship between two roles.
 	 * @param role The child role.
-	 * @param parentRole The parent role to stop inheriting from.
+	 * @param inheritsFrom The parent role to stop inheriting from.
 	 * @returns Nothing.
 	 * @throws GeneralError if the request fails.
 	 */
-	public async removeRoleInheritance(role: string, parentRole: string): Promise<void> {
+	public async removeRoleInheritance(role: string, inheritsFrom: string): Promise<void> {
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(role), role);
 		Guards.stringValue(
 			EntityStorageAuthorizationConnector.CLASS_NAME,
-			nameof(parentRole),
-			parentRole
+			nameof(inheritsFrom),
+			inheritsFrom
 		);
 
 		try {
 			await this._authorizationRoleInheritanceEntityStorage.remove(
-				this.inheritanceId(role, parentRole)
+				this.inheritanceId(role, inheritsFrom)
 			);
 			await Promise.all([
 				this.removeRoleNameIfUnreferenced(role),
-				this.removeRoleNameIfUnreferenced(parentRole)
+				this.removeRoleNameIfUnreferenced(inheritsFrom)
 			]);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
@@ -644,7 +644,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 			throw new GeneralError(
 				EntityStorageAuthorizationConnector.CLASS_NAME,
 				"removeRoleInheritanceFailed",
-				{ role, parentRole },
+				{ role, inheritsFrom },
 				err
 			);
 		}
@@ -663,9 +663,9 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 			const result = await this._authorizationRoleInheritanceEntityStorage.query(
 				{ property: "role", value: role, comparison: ComparisonOperator.Equals },
 				undefined,
-				["parentRole"]
+				["inheritsFrom"]
 			);
-			return result.entities.map(e => e.parentRole).filter((r): r is string => r !== undefined);
+			return result.entities.map(e => e.inheritsFrom).filter((r): r is string => r !== undefined);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -690,7 +690,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 
 		try {
 			const result = await this._authorizationRoleInheritanceEntityStorage.query(
-				{ property: "parentRole", value: role, comparison: ComparisonOperator.Equals },
+				{ property: "inheritsFrom", value: role, comparison: ComparisonOperator.Equals },
 				undefined,
 				["role"]
 			);
@@ -734,12 +734,12 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	/**
 	 * Build the compound primary key for a role inheritance relationship.
 	 * @param role The child role.
-	 * @param parentRole The parent role.
+	 * @param inheritsFrom The parent role.
 	 * @returns The compound id string.
 	 * @internal
 	 */
-	private inheritanceId(role: string, parentRole: string): string {
-		return `${role}|${parentRole}`;
+	private inheritanceId(role: string, inheritsFrom: string): string {
+		return `${role}|${inheritsFrom}`;
 	}
 
 	/**
@@ -764,7 +764,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 				1
 			),
 			this._authorizationRoleInheritanceEntityStorage.query(
-				{ property: "parentRole", value: roleName, comparison: ComparisonOperator.Equals },
+				{ property: "inheritsFrom", value: roleName, comparison: ComparisonOperator.Equals },
 				undefined,
 				["id"],
 				undefined,

@@ -558,7 +558,7 @@ describe("AuthorizationRestClient", () => {
 			});
 		});
 
-		test("throws when parentRole is empty", async () => {
+		test("throws when inheritsFrom is empty", async () => {
 			await expect(client.addRoleInheritance(ROLE, "")).rejects.toMatchObject({
 				name: GuardError.CLASS_NAME,
 				message: "guard.stringEmpty"
@@ -575,14 +575,14 @@ describe("AuthorizationRestClient", () => {
 			expect(options.method).toBe(HttpMethod.POST);
 		});
 
-		test("sends parentRole in the request body", async () => {
+		test("sends inheritsFrom in the request body", async () => {
 			fetchMock.mockResolvedValueOnce(noContentResponse());
 
 			await client.addRoleInheritance(ROLE, PARENT_ROLE);
 
 			const [, options] = fetchMock.mock.calls[0];
 			const body = JSON.parse(options.body);
-			expect(body.parentRole).toBe(PARENT_ROLE);
+			expect(body.inheritsFrom).toBe(PARENT_ROLE);
 		});
 
 		test("resolves without a return value", async () => {
@@ -602,14 +602,14 @@ describe("AuthorizationRestClient", () => {
 			});
 		});
 
-		test("throws when parentRole is empty", async () => {
+		test("throws when inheritsFrom is empty", async () => {
 			await expect(client.removeRoleInheritance(ROLE, "")).rejects.toMatchObject({
 				name: GuardError.CLASS_NAME,
 				message: "guard.stringEmpty"
 			});
 		});
 
-		test("sends DELETE to /{prefix}/role/:role/inherit/:parentRole", async () => {
+		test("sends DELETE to /{prefix}/role/:role/inherit/:inheritsFrom", async () => {
 			fetchMock.mockResolvedValueOnce(noContentResponse());
 
 			await client.removeRoleInheritance(ROLE, PARENT_ROLE);

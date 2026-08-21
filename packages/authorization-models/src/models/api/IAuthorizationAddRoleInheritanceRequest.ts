@@ -22,6 +22,6 @@ export interface IAuthorizationAddRoleInheritanceRequest {
 		/**
 		 * The parent role to inherit from.
 		 */
-		parentRole: string;
+		inheritsFrom: string;
 	};
 }
