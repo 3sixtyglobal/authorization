@@ -1,6 +1,6 @@
 {
 	"name": "@twin.org/authorization-rest-client",
-	"version": "0.9.2-next.0",
+	"version": "0.9.3-next.0",
 	"description": "REST client for consuming authorisation service endpoints.",
 	"repository": {
 		"type": "git",
@@ -30,7 +30,7 @@
 	"dependencies": {
 		"@twin.org/api-core": "next",
 		"@twin.org/api-models": "next",
-		"@twin.org/authorization-models": "0.9.2-next.0",
+		"@twin.org/authorization-models": "0.9.3-next.0",
 		"@twin.org/core": "next",
 		"@twin.org/nameof": "next",
 		"@twin.org/web": "next"
