@@ -15,6 +15,8 @@ import type {
 	IAuthorizationGetAllPoliciesResponse,
 	IAuthorizationGetAllRolesRequest,
 	IAuthorizationGetAllRolesResponse,
+	IAuthorizationHasRolesRequest,
+	IAuthorizationHasRolesResponse,
 	IAuthorizationGetChildRolesRequest,
 	IAuthorizationGetChildRolesResponse,
 	IAuthorizationGetParentRolesRequest,
@@ -196,6 +198,22 @@ export class AuthorizationRestClient extends BaseRestClient implements IAuthoriz
 		});
 
 		return response.body;
+	}
+
+	/**
+	 * Check whether each of the given role names exists in the system.
+	 * @param roles The role names to check.
+	 * @returns An array of booleans in the same order as the input.
+	 */
+	public async hasRoles(roles: string[]): Promise<boolean[]> {
+		Guards.array<string>(AuthorizationRestClient.CLASS_NAME, nameof(roles), roles);
+
+		const response = await this.fetch<
+			IAuthorizationHasRolesRequest,
+			IAuthorizationHasRolesResponse
+		>("/roles/has", HttpMethod.POST, { body: { roles } });
+
+		return response.body.exists;
 	}
 
 	/**

@@ -19,6 +19,8 @@ import type {
 	IAuthorizationGetAllPoliciesResponse,
 	IAuthorizationGetAllRolesRequest,
 	IAuthorizationGetAllRolesResponse,
+	IAuthorizationHasRolesRequest,
+	IAuthorizationHasRolesResponse,
 	IAuthorizationGetChildRolesRequest,
 	IAuthorizationGetChildRolesResponse,
 	IAuthorizationGetParentRolesRequest,
@@ -316,6 +318,46 @@ export function generateRestRoutesAuthorization(
 						response: {
 							body: {
 								roles: ["admin", "editor", "viewer"]
+							}
+						}
+					}
+				]
+			}
+		],
+		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
+		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
+	};
+
+	const hasRolesRoute: IRestRoute<IAuthorizationHasRolesRequest, IAuthorizationHasRolesResponse> = {
+		operationId: "authorizationHasRoles",
+		summary: "Check whether a list of roles exist in the system",
+		tag: tagsAuthorization[0].name,
+		method: "POST",
+		path: `${baseRouteName}/roles/has`,
+		handler: async (httpRequestContext, request) =>
+			authorizationHasRoles(httpRequestContext, componentName, request),
+		requestType: {
+			type: nameof<IAuthorizationHasRolesRequest>(),
+			examples: [
+				{
+					id: "authorizationHasRolesExample",
+					request: {
+						body: {
+							roles: ["admin", "editor", "unknown-role"]
+						}
+					}
+				}
+			]
+		},
+		responseType: [
+			{
+				type: nameof<IAuthorizationHasRolesResponse>(),
+				examples: [
+					{
+						id: "authorizationHasRolesResponseExample",
+						response: {
+							body: {
+								exists: [true, true, false]
 							}
 						}
 					}
@@ -758,6 +800,7 @@ export function generateRestRoutesAuthorization(
 		removePolicyRoute,
 		getAllPoliciesRoute,
 		getAllRolesRoute,
+		hasRolesRoute,
 		getPoliciesForSubjectRoute,
 		addRoleForSubjectRoute,
 		removeRoleForSubjectRoute,
@@ -932,6 +975,32 @@ export async function authorizationGetAllRoles(
 	const result = await component.getAllRoles(request.query?.cursor, limit);
 
 	return { body: result };
+}
+
+/**
+ * Perform the has roles operation.
+ * @param httpRequestContext The request context for the API.
+ * @param componentName The name of the component to use in the routes.
+ * @param request The request.
+ * @returns The response object with additional http response properties.
+ */
+export async function authorizationHasRoles(
+	httpRequestContext: IHttpRequestContext,
+	componentName: string,
+	request: IAuthorizationHasRolesRequest
+): Promise<IAuthorizationHasRolesResponse> {
+	Guards.object<IAuthorizationHasRolesRequest>(ROUTES_SOURCE, nameof(request), request);
+	Guards.object<IAuthorizationHasRolesRequest["body"]>(
+		ROUTES_SOURCE,
+		nameof(request.body),
+		request.body
+	);
+	Guards.array<string>(ROUTES_SOURCE, nameof(request.body.roles), request.body.roles);
+
+	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
+	const exists = await component.hasRoles(request.body.roles);
+
+	return { body: { exists } };
 }
 
 /**

@@ -13,6 +13,8 @@ export * from "./models/api/IAuthorizationGetAllPoliciesRequest.js";
 export * from "./models/api/IAuthorizationGetAllPoliciesResponse.js";
 export * from "./models/api/IAuthorizationGetAllRolesRequest.js";
 export * from "./models/api/IAuthorizationGetAllRolesResponse.js";
+export * from "./models/api/IAuthorizationHasRolesRequest.js";
+export * from "./models/api/IAuthorizationHasRolesResponse.js";
 export * from "./models/api/IAuthorizationGetChildRolesRequest.js";
 export * from "./models/api/IAuthorizationGetChildRolesResponse.js";
 export * from "./models/api/IAuthorizationGetParentRolesRequest.js";

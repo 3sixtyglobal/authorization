@@ -450,4 +450,39 @@ describe("AuthorizationService", () => {
 			expect(spy).not.toHaveBeenCalled();
 		});
 	});
+
+	describe("hasRoles", () => {
+		test("returns empty array for empty input", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			const result = await service.hasRoles([]);
+			expect(result).toEqual([]);
+		});
+
+		test("returns false for a role that does not exist", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			const result = await service.hasRoles(["unknown"]);
+			expect(result).toEqual([false]);
+		});
+
+		test("returns true for a role that exists", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await connector.addRoleForSubject("alice", "admin");
+			const result = await service.hasRoles(["admin"]);
+			expect(result).toEqual([true]);
+		});
+
+		test("returns results in input order for mixed existing and missing roles", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await connector.addRoleForSubject("alice", "admin");
+			const result = await service.hasRoles(["admin", "missing"]);
+			expect(result).toEqual([true, false]);
+		});
+
+		test("delegates to the connector", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			const spy = vi.spyOn(connector, "hasRoles");
+			await service.hasRoles(["admin"]);
+			expect(spy).toHaveBeenCalledWith(["admin"]);
+		});
+	});
 });

@@ -9,6 +9,7 @@
 			"getPoliciesForSubjectFailed": "The retrieval of policies for the subject failed",
 			"getAllPoliciesFailed": "The retrieval of all policies failed",
 			"getAllRolesFailed": "The retrieval of all roles failed",
+			"hasRolesFailed": "The check for role existence failed",
 			"addRoleForSubjectFailed": "The assignment of the role to the subject failed",
 			"removeRoleForSubjectFailed": "The removal of the role from the subject failed",
 			"removeAllRolesForSubjectFailed": "The removal of all roles from the subject failed",

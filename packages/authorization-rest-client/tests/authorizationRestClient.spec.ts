@@ -681,4 +681,41 @@ describe("AuthorizationRestClient", () => {
 			expect(result).toEqual([ROLE]);
 		});
 	});
+
+	describe("hasRoles", () => {
+		test("sends POST to /{prefix}/roles/has", async () => {
+			fetchMock.mockResolvedValueOnce(jsonResponse({ exists: [true, false] }));
+
+			await client.hasRoles([ROLE, "missing"]);
+
+			const [url, options] = fetchMock.mock.calls[0];
+			expect(url).toBe(`${ENDPOINT}/${PREFIX}/roles/has`);
+			expect(options.method).toBe(HttpMethod.POST);
+		});
+
+		test("sends roles in the request body", async () => {
+			fetchMock.mockResolvedValueOnce(jsonResponse({ exists: [true] }));
+
+			await client.hasRoles([ROLE]);
+
+			const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+			expect(body).toEqual({ roles: [ROLE] });
+		});
+
+		test("returns the exists array", async () => {
+			fetchMock.mockResolvedValueOnce(jsonResponse({ exists: [true, false] }));
+
+			const result = await client.hasRoles([ROLE, "missing"]);
+
+			expect(result).toEqual([true, false]);
+		});
+
+		test("returns empty array for empty input", async () => {
+			fetchMock.mockResolvedValueOnce(jsonResponse({ exists: [] }));
+
+			const result = await client.hasRoles([]);
+
+			expect(result).toEqual([]);
+		});
+	});
 });

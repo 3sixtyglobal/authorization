@@ -316,6 +316,22 @@ export class AuthorizationService implements IAuthorizationComponent {
 	}
 
 	/**
+	 * Check whether each of the given role names exists in the system.
+	 * @param roles The role names to check.
+	 * @returns An array of booleans in the same order as the input.
+	 */
+	public async hasRoles(roles: string[]): Promise<boolean[]> {
+		Guards.array<string>(AuthorizationService.CLASS_NAME, nameof(roles), roles);
+
+		try {
+			const connector = this.getConnector();
+			return await connector.hasRoles(roles);
+		} catch (error) {
+			throw new GeneralError(AuthorizationService.CLASS_NAME, "hasRolesFailed", undefined, error);
+		}
+	}
+
+	/**
 	 * Assign a role to a subject.
 	 * @param subject The subject to assign the role to.
 	 * @param role The role to assign.

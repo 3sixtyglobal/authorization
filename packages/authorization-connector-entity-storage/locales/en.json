@@ -8,6 +8,7 @@
 			"getPoliciesForSubjectFailed": "Failed to get policies for subject \"{subject}\".",
 			"getAllPoliciesFailed": "Failed to retrieve all authorization policies.",
 			"getAllRolesFailed": "Failed to retrieve all authorization roles.",
+			"hasRolesFailed": "Failed to check whether roles exist.",
 			"addRoleForSubjectFailed": "Failed to add role \"{role}\" for subject \"{subject}\".",
 			"removeRoleForSubjectFailed": "Failed to remove role \"{role}\" from subject \"{subject}\".",
 			"removeAllRolesForSubjectFailed": "Failed to remove all roles from subject \"{subject}\".",

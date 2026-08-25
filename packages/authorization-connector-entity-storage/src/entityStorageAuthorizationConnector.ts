@@ -390,6 +390,35 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	}
 
 	/**
+	 * Check whether each of the given role names exists in the system.
+	 * @param roles The role names to check.
+	 * @returns An array of booleans in the same order as the input.
+	 * @throws GeneralError if the query fails.
+	 */
+	public async hasRoles(roles: string[]): Promise<boolean[]> {
+		Guards.array<string>(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(roles), roles);
+
+		try {
+			return await Promise.all(
+				roles.map(async role => {
+					const entity = await this._authorizationRoleNameEntityStorage.get(role);
+					return entity !== undefined;
+				})
+			);
+		} catch (err) {
+			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
+				throw err;
+			}
+			throw new GeneralError(
+				EntityStorageAuthorizationConnector.CLASS_NAME,
+				"hasRolesFailed",
+				undefined,
+				err
+			);
+		}
+	}
+
+	/**
 	 * Assign a role to a subject.
 	 * @param subject The subject to assign the role to.
 	 * @param role The role to assign.

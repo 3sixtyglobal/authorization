@@ -22,6 +22,7 @@ describe("RulesHelper authorization route rules", () => {
 				{ subject: "authorization:write", object: "authorizationRemovePolicy", action: "execute" },
 				{ subject: "authorization:read", object: "authorizationGetAllPolicies", action: "execute" },
 				{ subject: "authorization:read", object: "authorizationGetAllRoles", action: "execute" },
+				{ subject: "authorization:read", object: "authorizationHasRoles", action: "execute" },
 				{
 					subject: "authorization:read",
 					object: "authorizationGetPoliciesForSubject",

@@ -70,6 +70,13 @@ export interface IAuthorizationConnector extends IComponent {
 	getAllRoles(cursor?: string, limit?: number): Promise<{ roles: string[]; cursor?: string }>;
 
 	/**
+	 * Check whether each of the given role names exists in the system.
+	 * @param roles The role names to check.
+	 * @returns An array of booleans in the same order as the input.
+	 */
+	hasRoles(roles: string[]): Promise<boolean[]>;
+
+	/**
 	 * Assign a role to a subject.
 	 * @param subject The subject to assign the role to.
 	 * @param role The role to assign.

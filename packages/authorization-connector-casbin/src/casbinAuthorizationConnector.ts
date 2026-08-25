@@ -540,6 +540,43 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	}
 
 	/**
+	 * Check whether each of the given role names exists in the system.
+	 * @param roles The role names to check.
+	 * @returns An array of booleans in the same order as the input.
+	 * @throws GeneralError if the query fails.
+	 */
+	public async hasRoles(roles: string[]): Promise<boolean[]> {
+		Guards.array<string>(CasbinAuthorizationConnector.CLASS_NAME, nameof(roles), roles);
+
+		try {
+			const tenantId = await this.getTenantId();
+			const rules = await this.getAllRawPolicies();
+			const gRules = rules.filter(
+				rule => rule.Ptype === "g" && this.isTenantValue(tenantId, rule.V1)
+			);
+			const v1Set = new Set(gRules.map(r => r.V1));
+			const roleSet = new Set<string>();
+			for (const r of gRules) {
+				roleSet.add(this.stripTenant(tenantId, r.V1));
+				if (v1Set.has(r.V0)) {
+					roleSet.add(this.stripTenant(tenantId, r.V0));
+				}
+			}
+			return roles.map(role => roleSet.has(role));
+		} catch (err) {
+			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
+				throw err;
+			}
+			throw new GeneralError(
+				CasbinAuthorizationConnector.CLASS_NAME,
+				"hasRolesFailed",
+				undefined,
+				err
+			);
+		}
+	}
+
+	/**
 	 * Assign a role to a subject.
 	 * @param subject The subject to assign the role to.
 	 * @param role The role to assign.

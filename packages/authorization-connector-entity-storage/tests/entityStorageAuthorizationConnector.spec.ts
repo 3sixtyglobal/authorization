@@ -646,6 +646,43 @@ describe("EntityStorageAuthorizationConnector", () => {
 		});
 	});
 
+	describe("hasRoles", () => {
+		test("returns empty array for empty input", async () => {
+			const result = await connector.hasRoles([]);
+			expect(result).toEqual([]);
+		});
+
+		test("returns false for a role that does not exist", async () => {
+			const result = await connector.hasRoles(["unknown"]);
+			expect(result).toEqual([false]);
+		});
+
+		test("returns true for a role added via addRoleForSubject", async () => {
+			await connector.addRoleForSubject("alice", "admin");
+			const result = await connector.hasRoles(["admin"]);
+			expect(result).toEqual([true]);
+		});
+
+		test("returns true for a role added via addRoleInheritance", async () => {
+			await connector.addRoleInheritance("editor", "viewer");
+			const result = await connector.hasRoles(["editor", "viewer"]);
+			expect(result).toEqual([true, true]);
+		});
+
+		test("returns results in input order with mixed existing and missing roles", async () => {
+			await connector.addRoleForSubject("alice", "admin");
+			const result = await connector.hasRoles(["admin", "missing", "admin"]);
+			expect(result).toEqual([true, false, true]);
+		});
+
+		test("returns false after a role is removed and becomes unreferenced", async () => {
+			await connector.addRoleForSubject("alice", "temp");
+			await connector.removeRoleForSubject("alice", "temp");
+			const result = await connector.hasRoles(["temp"]);
+			expect(result).toEqual([false]);
+		});
+	});
+
 	describe("removeRoleInheritance", () => {
 		test("removes an inheritance relationship", async () => {
 			await connector.addRoleInheritance("editor", "viewer");
