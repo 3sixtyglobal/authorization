@@ -26,13 +26,13 @@ export class RulesHelper {
 
 		for (const source of sources) {
 			const operationId = source.itemId;
-			const defaultPermissions = source.permissions;
-			const defaultRoles = source.roles;
+			const permissions = source.permissions;
+			const roles = source.roles;
 
-			if (Is.arrayValue(defaultPermissions)) {
+			if (Is.arrayValue(permissions)) {
 				const primaryPermissions: string[] = [];
 
-				for (const entry of defaultPermissions) {
+				for (const entry of permissions) {
 					const permission = Is.stringValue(entry) ? entry : entry.permission;
 					primaryPermissions.push(permission);
 
@@ -54,8 +54,8 @@ export class RulesHelper {
 					}
 				}
 
-				if (Is.arrayValue(defaultRoles)) {
-					for (const entry of defaultRoles) {
+				if (Is.arrayValue(roles)) {
+					for (const entry of roles) {
 						const role = Is.stringValue(entry) ? entry : entry.role;
 
 						for (const permission of primaryPermissions) {
