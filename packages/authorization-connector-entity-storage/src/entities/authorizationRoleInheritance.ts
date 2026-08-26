@@ -8,10 +8,16 @@ import { entity, property } from "@twin.org/entity";
 @entity()
 export class AuthorizationRoleInheritance {
 	/**
-	 * The compound identifier for this inheritance relationship, in "role|inheritsFrom" format.
+	 * The compound identifier for this inheritance relationship, in "modelId|role|inheritsFrom" format.
 	 */
 	@property({ type: "string", isPrimary: true })
 	public id!: string;
+
+	/**
+	 * The model identifier partitioning this inheritance.
+	 */
+	@property({ type: "string", isSecondary: true })
+	public modelId!: string;
 
 	/**
 	 * The child role that inherits permissions from the parent.

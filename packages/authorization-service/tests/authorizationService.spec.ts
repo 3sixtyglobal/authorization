@@ -17,6 +17,7 @@ import { nameof } from "@twin.org/nameof";
 import { AuthorizationService } from "../src/authorizationService.js";
 
 const TEST_NAMESPACE = "test";
+const TEST_MODEL_ID = "test-model-id";
 
 describe("AuthorizationService", () => {
 	let connector: EntityStorageAuthorizationConnector;
@@ -80,12 +81,12 @@ describe("AuthorizationService", () => {
 
 	describe("check cache", () => {
 		test("returns cached result without calling connector again", async () => {
-			await connector.addPolicy({ subject: "alice", object: "/data", action: "read" });
+			await connector.addPolicy(TEST_MODEL_ID, "alice", "/data", "read");
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");
 
-			const r1 = await service.check("alice", "/data", "read");
-			const r2 = await service.check("alice", "/data", "read");
+			const r1 = await service.check(TEST_MODEL_ID, "alice", "/data", "read");
+			const r2 = await service.check(TEST_MODEL_ID, "alice", "/data", "read");
 
 			expect(r1).toBe(true);
 			expect(r2).toBe(true);
@@ -96,47 +97,49 @@ describe("AuthorizationService", () => {
 			[
 				"addPolicy",
 				"alice",
-				async (svc: AuthorizationService) =>
-					svc.addPolicy({ subject: "alice", object: "/data", action: "read" })
+				async (svc: AuthorizationService) => svc.addPolicy(TEST_MODEL_ID, "alice", "/data", "read")
 			],
 			[
 				"removePolicy",
 				"alice",
 				async (svc: AuthorizationService) =>
-					svc.removePolicy({ subject: "alice", object: "/data", action: "read" })
+					svc.removePolicy(TEST_MODEL_ID, "alice", "/data", "read")
 			],
 			[
 				"addRoleForSubject",
 				"alice",
-				async (svc: AuthorizationService) => svc.addRoleForSubject("alice", "admin")
+				async (svc: AuthorizationService) => svc.addRoleForSubject(TEST_MODEL_ID, "alice", "admin")
 			],
 			[
 				"removeRoleForSubject",
 				"alice",
-				async (svc: AuthorizationService) => svc.removeRoleForSubject("alice", "admin")
+				async (svc: AuthorizationService) =>
+					svc.removeRoleForSubject(TEST_MODEL_ID, "alice", "admin")
 			],
 			[
 				"removeAllRolesForSubject",
 				"alice",
-				async (svc: AuthorizationService) => svc.removeAllRolesForSubject("alice")
+				async (svc: AuthorizationService) => svc.removeAllRolesForSubject(TEST_MODEL_ID, "alice")
 			],
 			[
 				"addRoleInheritance",
 				"editor",
-				async (svc: AuthorizationService) => svc.addRoleInheritance("editor", "viewer")
+				async (svc: AuthorizationService) =>
+					svc.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer")
 			],
 			[
 				"removeRoleInheritance",
 				"editor",
-				async (svc: AuthorizationService) => svc.removeRoleInheritance("editor", "viewer")
+				async (svc: AuthorizationService) =>
+					svc.removeRoleInheritance(TEST_MODEL_ID, "editor", "viewer")
 			]
 		])("invalidates cache after %s", async (label, subject, mutate) => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");
 
-			await service.check(subject, "/data", "read");
+			await service.check(TEST_MODEL_ID, subject, "/data", "read");
 			await mutate(service);
-			await service.check(subject, "/data", "read");
+			await service.check(TEST_MODEL_ID, subject, "/data", "read");
 
 			expect(spy).toHaveBeenCalledTimes(2);
 		});
@@ -146,10 +149,10 @@ describe("AuthorizationService", () => {
 			const spy = vi.spyOn(connector, "check");
 
 			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantA" }, async () =>
-				service.check("alice", "/data", "read")
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantB" }, async () =>
-				service.check("alice", "/data", "read")
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 
 			expect(spy).toHaveBeenCalledTimes(2);
@@ -160,22 +163,22 @@ describe("AuthorizationService", () => {
 			const spy = vi.spyOn(connector, "check");
 
 			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantA" }, async () =>
-				service.check("alice", "/data", "read")
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantB" }, async () =>
-				service.check("alice", "/data", "read")
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 			expect(spy).toHaveBeenCalledTimes(2);
 
 			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantA" }, async () =>
-				service.addPolicy({ subject: "alice", object: "/data", action: "read" })
+				service.addPolicy(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 
 			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantA" }, async () =>
-				service.check("alice", "/data", "read")
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantB" }, async () =>
-				service.check("alice", "/data", "read")
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 
 			expect(spy).toHaveBeenCalledTimes(3);
@@ -185,8 +188,8 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");
 
-			const r1 = await service.check("alice", "/data", "read");
-			const r2 = await service.check("alice", "/data", "read");
+			const r1 = await service.check(TEST_MODEL_ID, "alice", "/data", "read");
+			const r2 = await service.check(TEST_MODEL_ID, "alice", "/data", "read");
 
 			expect(r1).toBe(false);
 			expect(r2).toBe(false);
@@ -197,13 +200,13 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");
 
-			await service.check("alice", "/data", "read"); // call 1
-			await service.check("alice", "/data", "write"); // call 2
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // call 1
+			await service.check(TEST_MODEL_ID, "alice", "/data", "write"); // call 2
 
-			await service.addPolicy({ subject: "alice", object: "/data", action: "read" });
+			await service.addPolicy(TEST_MODEL_ID, "alice", "/data", "read");
 
-			await service.check("alice", "/data", "read"); // invalidated — call 3
-			await service.check("alice", "/data", "write"); // still cached
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // invalidated — call 3
+			await service.check(TEST_MODEL_ID, "alice", "/data", "write"); // still cached
 
 			expect(spy).toHaveBeenCalledTimes(3);
 		});
@@ -212,13 +215,13 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");
 
-			await service.check("alice", "/data", "read"); // call 1
-			await service.check("alice", "/data", "write"); // call 2
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // call 1
+			await service.check(TEST_MODEL_ID, "alice", "/data", "write"); // call 2
 
-			await service.removePolicy({ subject: "alice", object: "/data", action: "read" });
+			await service.removePolicy(TEST_MODEL_ID, "alice", "/data", "read");
 
-			await service.check("alice", "/data", "read"); // invalidated — call 3
-			await service.check("alice", "/data", "write"); // still cached
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // invalidated — call 3
+			await service.check(TEST_MODEL_ID, "alice", "/data", "write"); // still cached
 
 			expect(spy).toHaveBeenCalledTimes(3);
 		});
@@ -227,15 +230,15 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");
 
-			await service.check("alice", "/data", "read"); // call 1
-			await service.check("alice", "/files", "write"); // call 2
-			await service.check("bob", "/data", "read"); // call 3
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // call 1
+			await service.check(TEST_MODEL_ID, "alice", "/files", "write"); // call 2
+			await service.check(TEST_MODEL_ID, "bob", "/data", "read"); // call 3
 
-			await service.addRoleForSubject("alice", "admin");
+			await service.addRoleForSubject(TEST_MODEL_ID, "alice", "admin");
 
-			await service.check("alice", "/data", "read"); // invalidated — call 4
-			await service.check("alice", "/files", "write"); // invalidated — call 5
-			await service.check("bob", "/data", "read"); // still cached
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // invalidated — call 4
+			await service.check(TEST_MODEL_ID, "alice", "/files", "write"); // invalidated — call 5
+			await service.check(TEST_MODEL_ID, "bob", "/data", "read"); // still cached
 
 			expect(spy).toHaveBeenCalledTimes(5);
 		});
@@ -244,15 +247,15 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");
 
-			await service.check("alice", "/data", "read"); // call 1
-			await service.check("alice", "/files", "write"); // call 2
-			await service.check("bob", "/data", "read"); // call 3
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // call 1
+			await service.check(TEST_MODEL_ID, "alice", "/files", "write"); // call 2
+			await service.check(TEST_MODEL_ID, "bob", "/data", "read"); // call 3
 
-			await service.removeRoleForSubject("alice", "admin");
+			await service.removeRoleForSubject(TEST_MODEL_ID, "alice", "admin");
 
-			await service.check("alice", "/data", "read"); // invalidated — call 4
-			await service.check("alice", "/files", "write"); // invalidated — call 5
-			await service.check("bob", "/data", "read"); // still cached
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // invalidated — call 4
+			await service.check(TEST_MODEL_ID, "alice", "/files", "write"); // invalidated — call 5
+			await service.check(TEST_MODEL_ID, "bob", "/data", "read"); // still cached
 
 			expect(spy).toHaveBeenCalledTimes(5);
 		});
@@ -261,15 +264,15 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");
 
-			await service.check("alice", "/data", "read"); // call 1
-			await service.check("alice", "/files", "write"); // call 2
-			await service.check("bob", "/data", "read"); // call 3
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // call 1
+			await service.check(TEST_MODEL_ID, "alice", "/files", "write"); // call 2
+			await service.check(TEST_MODEL_ID, "bob", "/data", "read"); // call 3
 
-			await service.removeAllRolesForSubject("alice");
+			await service.removeAllRolesForSubject(TEST_MODEL_ID, "alice");
 
-			await service.check("alice", "/data", "read"); // invalidated — call 4
-			await service.check("alice", "/files", "write"); // invalidated — call 5
-			await service.check("bob", "/data", "read"); // still cached
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // invalidated — call 4
+			await service.check(TEST_MODEL_ID, "alice", "/files", "write"); // invalidated — call 5
+			await service.check(TEST_MODEL_ID, "bob", "/data", "read"); // still cached
 
 			expect(spy).toHaveBeenCalledTimes(5);
 		});
@@ -278,15 +281,15 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");
 
-			await service.check("editor", "/data", "read"); // call 1
-			await service.check("editor", "/files", "write"); // call 2
-			await service.check("alice", "/data", "read"); // call 3
+			await service.check(TEST_MODEL_ID, "editor", "/data", "read"); // call 1
+			await service.check(TEST_MODEL_ID, "editor", "/files", "write"); // call 2
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // call 3
 
-			await service.addRoleInheritance("editor", "viewer");
+			await service.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
 
-			await service.check("editor", "/data", "read"); // invalidated — call 4
-			await service.check("editor", "/files", "write"); // invalidated — call 5
-			await service.check("alice", "/data", "read"); // still cached
+			await service.check(TEST_MODEL_ID, "editor", "/data", "read"); // invalidated — call 4
+			await service.check(TEST_MODEL_ID, "editor", "/files", "write"); // invalidated — call 5
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // still cached
 
 			expect(spy).toHaveBeenCalledTimes(5);
 		});
@@ -295,15 +298,15 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");
 
-			await service.check("editor", "/data", "read"); // call 1
-			await service.check("editor", "/files", "write"); // call 2
-			await service.check("alice", "/data", "read"); // call 3
+			await service.check(TEST_MODEL_ID, "editor", "/data", "read"); // call 1
+			await service.check(TEST_MODEL_ID, "editor", "/files", "write"); // call 2
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // call 3
 
-			await service.removeRoleInheritance("editor", "viewer");
+			await service.removeRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
 
-			await service.check("editor", "/data", "read"); // invalidated — call 4
-			await service.check("editor", "/files", "write"); // invalidated — call 5
-			await service.check("alice", "/data", "read"); // still cached
+			await service.check(TEST_MODEL_ID, "editor", "/data", "read"); // invalidated — call 4
+			await service.check(TEST_MODEL_ID, "editor", "/files", "write"); // invalidated — call 5
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // still cached
 
 			expect(spy).toHaveBeenCalledTimes(5);
 		});
@@ -313,24 +316,24 @@ describe("AuthorizationService", () => {
 			const spy = vi.spyOn(connector, "check");
 
 			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantA" }, async () =>
-				service.check("alice", "/data", "read")
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantB" }, async () =>
-				service.check("alice", "/data", "read")
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 			expect(spy).toHaveBeenCalledTimes(2);
 
 			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantA" }, async () =>
-				service.addRoleForSubject("alice", "admin")
+				service.addRoleForSubject(TEST_MODEL_ID, "alice", "admin")
 			);
 
 			await ContextIdStore.run(
 				{ [ContextIdKeys.Tenant]: "tenantA" },
-				async () => service.check("alice", "/data", "read") // tenantA invalidated
+				async () => service.check(TEST_MODEL_ID, "alice", "/data", "read") // tenantA invalidated
 			);
 			await ContextIdStore.run(
 				{ [ContextIdKeys.Tenant]: "tenantB" },
-				async () => service.check("alice", "/data", "read") // tenantB still cached
+				async () => service.check(TEST_MODEL_ID, "alice", "/data", "read") // tenantB still cached
 			);
 
 			expect(spy).toHaveBeenCalledTimes(3);
@@ -341,103 +344,82 @@ describe("AuthorizationService", () => {
 			const spy = vi.spyOn(connector, "check");
 
 			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantA" }, async () =>
-				service.check("editor", "/data", "read")
+				service.check(TEST_MODEL_ID, "editor", "/data", "read")
 			);
 			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantB" }, async () =>
-				service.check("editor", "/data", "read")
+				service.check(TEST_MODEL_ID, "editor", "/data", "read")
 			);
 			expect(spy).toHaveBeenCalledTimes(2);
 
 			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantA" }, async () =>
-				service.addRoleInheritance("editor", "viewer")
+				service.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer")
 			);
 
 			await ContextIdStore.run(
 				{ [ContextIdKeys.Tenant]: "tenantA" },
-				async () => service.check("editor", "/data", "read") // tenantA invalidated
+				async () => service.check(TEST_MODEL_ID, "editor", "/data", "read") // tenantA invalidated
 			);
 			await ContextIdStore.run(
 				{ [ContextIdKeys.Tenant]: "tenantB" },
-				async () => service.check("editor", "/data", "read") // tenantB still cached
+				async () => service.check(TEST_MODEL_ID, "editor", "/data", "read") // tenantB still cached
 			);
 
 			expect(spy).toHaveBeenCalledTimes(3);
 		});
 	});
 
-	describe("checkAny", () => {
-		test("returns false when subjects is empty", async () => {
-			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
-			await expect(service.checkAny([], "resource", "execute")).resolves.toBe(false);
-		});
-
-		test("returns true when a subject has a matching policy", async () => {
-			await connector.addPolicy({ subject: "alice", object: "resource", action: "execute" });
-			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
-			await expect(service.checkAny(["alice"], "resource", "execute")).resolves.toBe(true);
-		});
-
-		test("returns true when at least one of multiple subjects has a matching policy", async () => {
-			await connector.addPolicy({ subject: "alice", object: "resource", action: "execute" });
-			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
-			await expect(service.checkAny(["bob", "alice"], "resource", "execute")).resolves.toBe(true);
-		});
-
-		test("returns false when no subject has a matching policy", async () => {
-			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
-			await expect(service.checkAny(["alice", "bob"], "resource", "execute")).resolves.toBe(false);
-		});
-
-		test("caches each subject result so the connector is not called again on subsequent calls", async () => {
-			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
-			const spy = vi.spyOn(connector, "checkAny");
-
-			await service.checkAny(["alice", "bob"], "resource", "execute");
-			await service.checkAny(["alice", "bob"], "resource", "execute");
-
-			expect(spy).toHaveBeenCalledTimes(1);
-		});
-
-		test("returns true immediately when a subject is already cached as true", async () => {
-			await connector.addPolicy({ subject: "alice", object: "resource", action: "execute" });
-			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
-			const spy = vi.spyOn(connector, "checkAny");
-
-			await service.checkAny(["alice"], "resource", "execute");
-			expect(spy).toHaveBeenCalledTimes(1);
-
-			const result = await service.checkAny(["alice", "bob"], "resource", "execute");
-			expect(result).toBe(true);
-			expect(spy).toHaveBeenCalledTimes(1);
-		});
-
-		test("calls the connector only for subjects not already in the cache", async () => {
-			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
-			const spy = vi.spyOn(connector, "checkAny");
-
-			await service.checkAny(["alice"], "resource", "execute");
-			await service.checkAny(["alice", "bob"], "resource", "execute");
-
-			expect(spy).toHaveBeenCalledTimes(2);
-			expect(spy.mock.calls[1][0]).toEqual(["bob"]);
-		});
-	});
-
 	describe("start", () => {
 		test("populates roles from migrationUserRoles and removes the SharedStore entry", async () => {
-			SharedStore.set<{ [id: string]: string[] }>("migrationUserRoles", {
-				user1: ["admin", "editor"],
-				user2: ["viewer"]
-			});
+			SharedStore.set<{ identity: string; roles: string[]; contextIds: undefined }[]>(
+				"migrationUserRoles",
+				[
+					{ identity: "user1", roles: ["admin", "editor"], contextIds: undefined },
+					{ identity: "user2", roles: ["viewer"], contextIds: undefined }
+				]
+			);
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 
 			await service.start();
 
-			const user1Roles = await connector.getRolesForSubject("user1");
-			const user2Roles = await connector.getRolesForSubject("user2");
+			const user1Roles = await connector.getRolesForSubject("rest", "user1");
+			const user2Roles = await connector.getRolesForSubject("rest", "user2");
 			expect(user1Roles).toEqual(expect.arrayContaining(["admin", "editor"]));
 			expect(user1Roles).toHaveLength(2);
 			expect(user2Roles).toEqual(["viewer"]);
+			expect(SharedStore.get("migrationUserRoles")).toBeUndefined();
+		});
+
+		test("populates roles within the correct tenant context when contextIds are provided", async () => {
+			SharedStore.set<{ identity: string; roles: string[]; contextIds: { tenant: string } }[]>(
+				"migrationUserRoles",
+				[
+					{
+						identity: "user1",
+						roles: ["admin"],
+						contextIds: { [ContextIdKeys.Tenant]: "tenantA" }
+					},
+					{
+						identity: "user2",
+						roles: ["viewer"],
+						contextIds: { [ContextIdKeys.Tenant]: "tenantB" }
+					}
+				]
+			);
+
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await service.start();
+
+			const user1RolesInA = await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: "tenantA" },
+				async () => connector.getRolesForSubject("rest", "user1")
+			);
+			const user2RolesInB = await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: "tenantB" },
+				async () => connector.getRolesForSubject("rest", "user2")
+			);
+
+			expect(user1RolesInA).toEqual(["admin"]);
+			expect(user2RolesInB).toEqual(["viewer"]);
 			expect(SharedStore.get("migrationUserRoles")).toBeUndefined();
 		});
 
@@ -454,35 +436,35 @@ describe("AuthorizationService", () => {
 	describe("hasRoles", () => {
 		test("returns empty array for empty input", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
-			const result = await service.hasRoles([]);
+			const result = await service.hasRoles(TEST_MODEL_ID, []);
 			expect(result).toEqual([]);
 		});
 
 		test("returns false for a role that does not exist", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
-			const result = await service.hasRoles(["unknown"]);
+			const result = await service.hasRoles(TEST_MODEL_ID, ["unknown"]);
 			expect(result).toEqual([false]);
 		});
 
 		test("returns true for a role that exists", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
-			await connector.addRoleForSubject("alice", "admin");
-			const result = await service.hasRoles(["admin"]);
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "admin");
+			const result = await service.hasRoles(TEST_MODEL_ID, ["admin"]);
 			expect(result).toEqual([true]);
 		});
 
 		test("returns results in input order for mixed existing and missing roles", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
-			await connector.addRoleForSubject("alice", "admin");
-			const result = await service.hasRoles(["admin", "missing"]);
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "admin");
+			const result = await service.hasRoles(TEST_MODEL_ID, ["admin", "missing"]);
 			expect(result).toEqual([true, false]);
 		});
 
 		test("delegates to the connector", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "hasRoles");
-			await service.hasRoles(["admin"]);
-			expect(spy).toHaveBeenCalledWith(["admin"]);
+			await service.hasRoles(TEST_MODEL_ID, ["admin"]);
+			expect(spy).toHaveBeenCalledWith(TEST_MODEL_ID, ["admin"]);
 		});
 	});
 });

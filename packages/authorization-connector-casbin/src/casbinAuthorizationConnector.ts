@@ -52,21 +52,20 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	private readonly _baseUrl: string;
 
 	/**
-	 * URL-encoded enforcer ID for use in query strings.
-	 * @internal
-	 */
-	private readonly _encodedEnforcerId: string;
-
-	/**
 	 * Shared request options for every fetch call.
 	 * @internal
 	 */
 	private readonly _requestOptions: { headers: IHttpHeaders; timeoutMs?: number };
 
 	/**
+	 * Set of enforcer IDs (owner/modelId) whose Casdoor enforcers are known to exist.
+	 * @internal
+	 */
+	private readonly _provisionedEnforcers: Set<string>;
+
+	/**
 	 * Creates a new instance of the CasbinAuthorizationConnector.
 	 * @param options The options for the connector.
-	 * @throws GeneralError if the enforcer ID is not in owner/name format.
 	 */
 	constructor(options: ICasbinAuthorizationConnectorConstructorOptions) {
 		Guards.object<ICasbinAuthorizationConnectorConstructorOptions>(
@@ -94,26 +93,14 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 			nameof(options.config.clientSecret),
 			options.config.clientSecret
 		);
-		Guards.stringValue(
-			CasbinAuthorizationConnector.CLASS_NAME,
-			nameof(options.config.enforcerId),
-			options.config.enforcerId
-		);
 
 		this._config = options.config;
+		this._provisionedEnforcers = new Set<string>();
 		this._loggingComponent = ComponentFactory.getIfExists<ILoggingComponent>(
 			options.loggingComponentType
 		);
 
 		this._baseUrl = StringHelper.trimTrailingSlashes(this._config.endpoint);
-
-		const separatorIndex = this._config.enforcerId.indexOf("/");
-		if (separatorIndex <= 0) {
-			throw new GeneralError(CasbinAuthorizationConnector.CLASS_NAME, "invalidEnforcerId", {
-				enforcerId: this._config.enforcerId
-			});
-		}
-		this._encodedEnforcerId = encodeURIComponent(this._config.enforcerId);
 
 		const credentials = Converter.bytesToBase64(
 			Converter.utf8ToBytes(`${this._config.clientId}:${this._config.clientSecret}`)
@@ -176,22 +163,26 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	/**
 	 * Check whether a subject is permitted to perform an action on an object.
 	 * Evaluates RBAC locally by traversing role inheritance from the stored grouping policies.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject requesting access.
 	 * @param object The object being accessed.
 	 * @param action The action to check.
 	 * @returns True if access is granted, false otherwise.
 	 * @throws GeneralError if the check request fails.
 	 */
-	public async check(subject: string, object: string, action: string): Promise<boolean> {
+	public async check(
+		modelId: string,
+		subject: string,
+		object: string,
+		action: string
+	): Promise<boolean> {
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(object), object);
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(action), action);
 
 		try {
-			const tenantId = await this.getTenantId();
-			const prefixedSubject = this.applyTenant(tenantId, subject);
-			const prefixedObject = this.applyTenant(tenantId, object);
-			const allRules = await this.getAllRawPolicies();
+			const allRules = await this.getAllRawPolicies(modelId);
 
 			const permissions = allRules.filter(r => r.Ptype === "p");
 			const groupings = allRules.filter(r => r.Ptype === "g");
@@ -204,8 +195,8 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 				roleGraph.get(g.V0)?.add(g.V1);
 			}
 
-			const reachable = new Set<string>([prefixedSubject]);
-			const queue: string[] = [prefixedSubject];
+			const reachable = new Set<string>([subject]);
+			const queue: string[] = [subject];
 			while (queue.length > 0) {
 				const current = queue.shift() ?? "";
 				for (const role of roleGraph.get(current) ?? []) {
@@ -216,9 +207,7 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 				}
 			}
 
-			return permissions.some(
-				p => reachable.has(p.V0) && p.V1 === prefixedObject && p.V2 === action
-			);
+			return permissions.some(p => reachable.has(p.V0) && p.V1 === object && p.V2 === action);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -233,121 +222,40 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	}
 
 	/**
-	 * Check whether any of the given subjects are permitted to perform an action on a resource.
-	 * Fetches all policies once and evaluates each subject locally, avoiding repeated HTTP calls.
-	 * Returns one result per subject in the same order as the input array.
-	 * @param subjects The subjects to check.
-	 * @param object The object being accessed.
-	 * @param action The action to check.
-	 * @returns An array of per-subject results in input order.
-	 * @throws GeneralError if the check request fails.
-	 */
-	public async checkAny(
-		subjects: string[],
-		object: string,
-		action: string
-	): Promise<(boolean | undefined)[]> {
-		Guards.array<string>(CasbinAuthorizationConnector.CLASS_NAME, nameof(subjects), subjects);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(object), object);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(action), action);
-
-		if (subjects.length === 0) {
-			return [];
-		}
-
-		try {
-			const tenantId = await this.getTenantId();
-			const prefixedObject = this.applyTenant(tenantId, object);
-			const allRules = await this.getAllRawPolicies();
-
-			const permissions = allRules.filter(r => r.Ptype === "p");
-			const groupings = allRules.filter(r => r.Ptype === "g");
-
-			const roleGraph = new Map<string, Set<string>>();
-			for (const g of groupings) {
-				if (!roleGraph.has(g.V0)) {
-					roleGraph.set(g.V0, new Set());
-				}
-				roleGraph.get(g.V0)?.add(g.V1);
-			}
-
-			return subjects.map(subject => {
-				const prefixedSubject = this.applyTenant(tenantId, subject);
-				const reachable = new Set<string>([prefixedSubject]);
-				const queue: string[] = [prefixedSubject];
-				while (queue.length > 0) {
-					const current = queue.shift() ?? "";
-					for (const role of roleGraph.get(current) ?? []) {
-						if (!reachable.has(role)) {
-							reachable.add(role);
-							queue.push(role);
-						}
-					}
-				}
-				return permissions.some(
-					p => reachable.has(p.V0) && p.V1 === prefixedObject && p.V2 === action
-				);
-			});
-		} catch (err) {
-			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
-				throw err;
-			}
-			throw new GeneralError(
-				CasbinAuthorizationConnector.CLASS_NAME,
-				"checkAnyFailed",
-				{ object, action },
-				err
-			);
-		}
-	}
-
-	/**
 	 * Add a policy rule.
-	 * @param policy The policy to add.
+	 * @param modelId The model identifier selecting which policy set to use.
+	 * @param subject The subject the policy applies to.
+	 * @param object The object the policy applies to.
+	 * @param action The action the policy applies to.
 	 * @returns Nothing.
 	 * @throws GeneralError if the add request fails.
 	 */
-	public async addPolicy(policy: IAuthorizationPolicy): Promise<void> {
-		Guards.object<IAuthorizationPolicy>(
-			CasbinAuthorizationConnector.CLASS_NAME,
-			nameof(policy),
-			policy
-		);
-		Guards.stringValue(
-			CasbinAuthorizationConnector.CLASS_NAME,
-			nameof(policy.subject),
-			policy.subject
-		);
-		Guards.stringValue(
-			CasbinAuthorizationConnector.CLASS_NAME,
-			nameof(policy.object),
-			policy.object
-		);
-		Guards.stringValue(
-			CasbinAuthorizationConnector.CLASS_NAME,
-			nameof(policy.action),
-			policy.action
-		);
+	public async addPolicy(
+		modelId: string,
+		subject: string,
+		object: string,
+		action: string
+	): Promise<void> {
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(object), object);
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(action), action);
 
 		try {
-			const tenantId = await this.getTenantId();
+			await this.ensureEnforcer(modelId);
+			const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
 			const response = await FetchHelper.fetchJson<
 				{ ptype: string; v0: string; v1: string; v2: string },
 				ICasbinServerResponse<string>
 			>(
 				CasbinAuthorizationConnector.CLASS_NAME,
-				`${this._baseUrl}/api/add-policy?id=${this._encodedEnforcerId}`,
+				`${this._baseUrl}/api/add-policy?id=${encodedEnforcerId}`,
 				HttpMethod.POST,
-				{
-					ptype: "p",
-					v0: this.applyTenant(tenantId, policy.subject),
-					v1: this.applyTenant(tenantId, policy.object),
-					v2: policy.action
-				},
+				{ ptype: "p", v0: subject, v1: object, v2: action },
 				this._requestOptions
 			);
 
-			this.assertOk(response, "addPolicyFailed", { subject: policy.subject });
+			this.assertOk(response, "addPolicyFailed", { subject });
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -355,7 +263,7 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 			throw new GeneralError(
 				CasbinAuthorizationConnector.CLASS_NAME,
 				"addPolicyFailed",
-				{ subject: policy.subject },
+				{ subject },
 				err
 			);
 		}
@@ -363,51 +271,38 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 
 	/**
 	 * Remove a policy rule.
-	 * @param policy The policy to remove.
+	 * @param modelId The model identifier selecting which policy set to use.
+	 * @param subject The subject of the policy to remove.
+	 * @param object The object of the policy to remove.
+	 * @param action The action of the policy to remove.
 	 * @returns Nothing.
 	 * @throws GeneralError if the remove request fails.
 	 */
-	public async removePolicy(policy: IAuthorizationPolicy): Promise<void> {
-		Guards.object<IAuthorizationPolicy>(
-			CasbinAuthorizationConnector.CLASS_NAME,
-			nameof(policy),
-			policy
-		);
-		Guards.stringValue(
-			CasbinAuthorizationConnector.CLASS_NAME,
-			nameof(policy.subject),
-			policy.subject
-		);
-		Guards.stringValue(
-			CasbinAuthorizationConnector.CLASS_NAME,
-			nameof(policy.object),
-			policy.object
-		);
-		Guards.stringValue(
-			CasbinAuthorizationConnector.CLASS_NAME,
-			nameof(policy.action),
-			policy.action
-		);
+	public async removePolicy(
+		modelId: string,
+		subject: string,
+		object: string,
+		action: string
+	): Promise<void> {
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(object), object);
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(action), action);
 
 		try {
-			const tenantId = await this.getTenantId();
+			const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
 			const response = await FetchHelper.fetchJson<
 				{ ptype: string; v0: string; v1: string; v2: string },
 				ICasbinServerResponse<string>
 			>(
 				CasbinAuthorizationConnector.CLASS_NAME,
-				`${this._baseUrl}/api/remove-policy?id=${this._encodedEnforcerId}`,
+				`${this._baseUrl}/api/remove-policy?id=${encodedEnforcerId}`,
 				HttpMethod.POST,
-				{
-					ptype: "p",
-					v0: this.applyTenant(tenantId, policy.subject),
-					v1: this.applyTenant(tenantId, policy.object),
-					v2: policy.action
-				},
+				{ ptype: "p", v0: subject, v1: object, v2: action },
 				this._requestOptions
 			);
 
-			this.assertOk(response, "removePolicyFailed", { subject: policy.subject });
+			this.assertOk(response, "removePolicyFailed", { subject });
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -415,7 +310,7 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 			throw new GeneralError(
 				CasbinAuthorizationConnector.CLASS_NAME,
 				"removePolicyFailed",
-				{ subject: policy.subject },
+				{ subject },
 				err
 			);
 		}
@@ -423,19 +318,28 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 
 	/**
 	 * Get all policy rules for a given subject.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject to query.
-	 * @returns The matching policies.
+	 * @param cursor The cursor to request the next chunk of results.
+	 * @param limit Limit the number of entities to return.
+	 * @returns The matching policies and an optional cursor for the next page.
 	 * @throws GeneralError if the query fails.
 	 */
-	public async getPoliciesForSubject(subject: string): Promise<IAuthorizationPolicy[]> {
+	public async getPoliciesForSubject(
+		modelId: string,
+		subject: string,
+		cursor?: string,
+		limit?: number
+	): Promise<{ entities: IAuthorizationPolicy[]; cursor?: string }> {
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
 
-		const result = await this.getAllPolicies(subject);
-		return result.entities;
+		return this.getAllPolicies(modelId, subject, cursor, limit);
 	}
 
 	/**
 	 * Get policy rules, optionally filtered by subject.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject Optional subject to filter by.
 	 * @param cursor The cursor to request the next chunk of results.
 	 * @param limit Limit the number of entities to return.
@@ -443,20 +347,18 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * @throws GeneralError if the query fails.
 	 */
 	public async getAllPolicies(
+		modelId: string,
 		subject?: string,
 		cursor?: string,
 		limit?: number
 	): Promise<{ entities: IAuthorizationPolicy[]; cursor?: string }> {
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
+
 		try {
-			const tenantId = await this.getTenantId();
-			const rules = await this.getAllRawPolicies();
+			const rules = await this.getAllRawPolicies(modelId);
 			let policies = rules
-				.filter(r => r.Ptype === "p" && this.isTenantValue(tenantId, r.V0))
-				.map(r => ({
-					subject: this.stripTenant(tenantId, r.V0),
-					object: this.stripTenant(tenantId, r.V1),
-					action: r.V2
-				}));
+				.filter(r => r.Ptype === "p")
+				.map(r => ({ subject: r.V0, object: r.V1, action: r.V2 }));
 
 			if (subject !== undefined) {
 				policies = policies.filter(p => p.subject === subject);
@@ -489,27 +391,28 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 
 	/**
 	 * Get all distinct role names in the system.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param cursor The cursor to request the next chunk of results.
 	 * @param limit Limit the number of roles to return.
 	 * @returns The role names and an optional cursor for the next page.
 	 * @throws GeneralError if the query fails.
 	 */
 	public async getAllRoles(
+		modelId: string,
 		cursor?: string,
 		limit?: number
 	): Promise<{ roles: string[]; cursor?: string }> {
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
+
 		try {
-			const tenantId = await this.getTenantId();
-			const rules = await this.getAllRawPolicies();
-			const gRules = rules.filter(
-				rule => rule.Ptype === "g" && this.isTenantValue(tenantId, rule.V1)
-			);
+			const rules = await this.getAllRawPolicies(modelId);
+			const gRules = rules.filter(rule => rule.Ptype === "g");
 			const v1Set = new Set(gRules.map(r => r.V1));
 			const roleSet = new Set<string>();
 			for (const r of gRules) {
-				roleSet.add(this.stripTenant(tenantId, r.V1));
+				roleSet.add(r.V1);
 				if (v1Set.has(r.V0)) {
-					roleSet.add(this.stripTenant(tenantId, r.V0));
+					roleSet.add(r.V0);
 				}
 			}
 			const allRoles = Array.from(roleSet).sort();
@@ -541,25 +444,24 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 
 	/**
 	 * Check whether each of the given role names exists in the system.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param roles The role names to check.
 	 * @returns An array of booleans in the same order as the input.
 	 * @throws GeneralError if the query fails.
 	 */
-	public async hasRoles(roles: string[]): Promise<boolean[]> {
+	public async hasRoles(modelId: string, roles: string[]): Promise<boolean[]> {
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.array<string>(CasbinAuthorizationConnector.CLASS_NAME, nameof(roles), roles);
 
 		try {
-			const tenantId = await this.getTenantId();
-			const rules = await this.getAllRawPolicies();
-			const gRules = rules.filter(
-				rule => rule.Ptype === "g" && this.isTenantValue(tenantId, rule.V1)
-			);
+			const rules = await this.getAllRawPolicies(modelId);
+			const gRules = rules.filter(rule => rule.Ptype === "g");
 			const v1Set = new Set(gRules.map(r => r.V1));
 			const roleSet = new Set<string>();
 			for (const r of gRules) {
-				roleSet.add(this.stripTenant(tenantId, r.V1));
+				roleSet.add(r.V1);
 				if (v1Set.has(r.V0)) {
-					roleSet.add(this.stripTenant(tenantId, r.V0));
+					roleSet.add(r.V0);
 				}
 			}
 			return roles.map(role => roleSet.has(role));
@@ -578,29 +480,28 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 
 	/**
 	 * Assign a role to a subject.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject to assign the role to.
 	 * @param role The role to assign.
 	 * @returns Nothing.
 	 * @throws GeneralError if the request fails.
 	 */
-	public async addRoleForSubject(subject: string, role: string): Promise<void> {
+	public async addRoleForSubject(modelId: string, subject: string, role: string): Promise<void> {
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
 
 		try {
-			const tenantId = await this.getTenantId();
+			await this.ensureEnforcer(modelId);
+			const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
 			const response = await FetchHelper.fetchJson<
 				{ ptype: string; v0: string; v1: string },
 				ICasbinServerResponse<string>
 			>(
 				CasbinAuthorizationConnector.CLASS_NAME,
-				`${this._baseUrl}/api/add-policy?id=${this._encodedEnforcerId}`,
+				`${this._baseUrl}/api/add-policy?id=${encodedEnforcerId}`,
 				HttpMethod.POST,
-				{
-					ptype: "g",
-					v0: this.applyTenant(tenantId, subject),
-					v1: this.applyTenant(tenantId, role)
-				},
+				{ ptype: "g", v0: subject, v1: role },
 				this._requestOptions
 			);
 
@@ -620,29 +521,27 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 
 	/**
 	 * Remove a role from a subject.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject to remove the role from.
 	 * @param role The role to remove.
 	 * @returns Nothing.
 	 * @throws GeneralError if the request fails.
 	 */
-	public async removeRoleForSubject(subject: string, role: string): Promise<void> {
+	public async removeRoleForSubject(modelId: string, subject: string, role: string): Promise<void> {
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
 
 		try {
-			const tenantId = await this.getTenantId();
+			const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
 			const response = await FetchHelper.fetchJson<
 				{ ptype: string; v0: string; v1: string },
 				ICasbinServerResponse<string>
 			>(
 				CasbinAuthorizationConnector.CLASS_NAME,
-				`${this._baseUrl}/api/remove-policy?id=${this._encodedEnforcerId}`,
+				`${this._baseUrl}/api/remove-policy?id=${encodedEnforcerId}`,
 				HttpMethod.POST,
-				{
-					ptype: "g",
-					v0: this.applyTenant(tenantId, subject),
-					v1: this.applyTenant(tenantId, role)
-				},
+				{ ptype: "g", v0: subject, v1: role },
 				this._requestOptions
 			);
 
@@ -662,20 +561,20 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 
 	/**
 	 * Remove all roles from a subject.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject to remove all roles from.
 	 * @returns Nothing.
 	 * @throws GeneralError if the request fails.
 	 */
-	public async removeAllRolesForSubject(subject: string): Promise<void> {
+	public async removeAllRolesForSubject(modelId: string, subject: string): Promise<void> {
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
 
 		try {
-			const tenantId = await this.getTenantId();
-			const prefixedSubject = this.applyTenant(tenantId, subject);
-			const rules = await this.getAllRawPolicies();
-			const subjectRoles = rules.filter(r => r.Ptype === "g" && r.V0 === prefixedSubject);
+			const rules = await this.getAllRawPolicies(modelId);
+			const subjectRoles = rules.filter(r => r.Ptype === "g" && r.V0 === subject);
 			for (const rule of subjectRoles) {
-				await this.removeRoleForSubject(subject, this.stripTenant(tenantId, rule.V1));
+				await this.removeRoleForSubject(modelId, subject, rule.V1);
 			}
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
@@ -692,20 +591,18 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 
 	/**
 	 * Get all roles assigned to a subject.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject to query.
 	 * @returns The assigned roles.
 	 * @throws GeneralError if the query fails.
 	 */
-	public async getRolesForSubject(subject: string): Promise<string[]> {
+	public async getRolesForSubject(modelId: string, subject: string): Promise<string[]> {
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
 
 		try {
-			const tenantId = await this.getTenantId();
-			const prefixedSubject = this.applyTenant(tenantId, subject);
-			const rules = await this.getAllRawPolicies();
-			return rules
-				.filter(r => r.Ptype === "g" && r.V0 === prefixedSubject)
-				.map(r => this.stripTenant(tenantId, r.V1));
+			const rules = await this.getAllRawPolicies(modelId);
+			return rules.filter(r => r.Ptype === "g" && r.V0 === subject).map(r => r.V1);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -721,20 +618,18 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 
 	/**
 	 * Get all subjects assigned to a given role.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param role The role to query.
 	 * @returns The subjects with the given role.
 	 * @throws GeneralError if the query fails.
 	 */
-	public async getSubjectsForRole(role: string): Promise<string[]> {
+	public async getSubjectsForRole(modelId: string, role: string): Promise<string[]> {
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
 
 		try {
-			const tenantId = await this.getTenantId();
-			const prefixedRole = this.applyTenant(tenantId, role);
-			const rules = await this.getAllRawPolicies();
-			return rules
-				.filter(r => r.Ptype === "g" && r.V1 === prefixedRole && this.isTenantValue(tenantId, r.V0))
-				.map(r => this.stripTenant(tenantId, r.V0));
+			const rules = await this.getAllRawPolicies(modelId);
+			return rules.filter(r => r.Ptype === "g" && r.V1 === role).map(r => r.V0);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -750,24 +645,20 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 
 	/**
 	 * Check whether a subject has a specific role.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject to check.
 	 * @param role The role to check for.
 	 * @returns True if the subject has the role.
 	 * @throws GeneralError if the request fails.
 	 */
-	public async hasRoleForSubject(subject: string, role: string): Promise<boolean> {
+	public async hasRoleForSubject(modelId: string, subject: string, role: string): Promise<boolean> {
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
 
 		try {
-			const tenantId = await this.getTenantId();
-			const rules = await this.getAllRawPolicies();
-			return rules.some(
-				r =>
-					r.Ptype === "g" &&
-					r.V0 === this.applyTenant(tenantId, subject) &&
-					r.V1 === this.applyTenant(tenantId, role)
-			);
+			const rules = await this.getAllRawPolicies(modelId);
+			return rules.some(r => r.Ptype === "g" && r.V0 === subject && r.V1 === role);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -783,29 +674,32 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 
 	/**
 	 * Define a parent-child inheritance relationship between two roles.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param role The child role that will inherit permissions from the parent.
 	 * @param inheritsFrom The parent role whose permissions are inherited.
 	 * @returns Nothing.
 	 * @throws GeneralError if the request fails.
 	 */
-	public async addRoleInheritance(role: string, inheritsFrom: string): Promise<void> {
+	public async addRoleInheritance(
+		modelId: string,
+		role: string,
+		inheritsFrom: string
+	): Promise<void> {
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(inheritsFrom), inheritsFrom);
 
 		try {
-			const tenantId = await this.getTenantId();
+			await this.ensureEnforcer(modelId);
+			const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
 			const response = await FetchHelper.fetchJson<
 				{ ptype: string; v0: string; v1: string },
 				ICasbinServerResponse<string>
 			>(
 				CasbinAuthorizationConnector.CLASS_NAME,
-				`${this._baseUrl}/api/add-policy?id=${this._encodedEnforcerId}`,
+				`${this._baseUrl}/api/add-policy?id=${encodedEnforcerId}`,
 				HttpMethod.POST,
-				{
-					ptype: "g",
-					v0: this.applyTenant(tenantId, role),
-					v1: this.applyTenant(tenantId, inheritsFrom)
-				},
+				{ ptype: "g", v0: role, v1: inheritsFrom },
 				this._requestOptions
 			);
 
@@ -825,29 +719,31 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 
 	/**
 	 * Remove a parent-child inheritance relationship between two roles.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param role The child role.
 	 * @param inheritsFrom The parent role to stop inheriting from.
 	 * @returns Nothing.
 	 * @throws GeneralError if the request fails.
 	 */
-	public async removeRoleInheritance(role: string, inheritsFrom: string): Promise<void> {
+	public async removeRoleInheritance(
+		modelId: string,
+		role: string,
+		inheritsFrom: string
+	): Promise<void> {
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(inheritsFrom), inheritsFrom);
 
 		try {
-			const tenantId = await this.getTenantId();
+			const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
 			const response = await FetchHelper.fetchJson<
 				{ ptype: string; v0: string; v1: string },
 				ICasbinServerResponse<string>
 			>(
 				CasbinAuthorizationConnector.CLASS_NAME,
-				`${this._baseUrl}/api/remove-policy?id=${this._encodedEnforcerId}`,
+				`${this._baseUrl}/api/remove-policy?id=${encodedEnforcerId}`,
 				HttpMethod.POST,
-				{
-					ptype: "g",
-					v0: this.applyTenant(tenantId, role),
-					v1: this.applyTenant(tenantId, inheritsFrom)
-				},
+				{ ptype: "g", v0: role, v1: inheritsFrom },
 				this._requestOptions
 			);
 
@@ -867,20 +763,18 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 
 	/**
 	 * Get all roles that a given role directly inherits from.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param role The role to query.
 	 * @returns The parent roles.
 	 * @throws GeneralError if the query fails.
 	 */
-	public async getParentRoles(role: string): Promise<string[]> {
+	public async getParentRoles(modelId: string, role: string): Promise<string[]> {
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
 
 		try {
-			const tenantId = await this.getTenantId();
-			const prefixedRole = this.applyTenant(tenantId, role);
-			const rules = await this.getAllRawPolicies();
-			return rules
-				.filter(r => r.Ptype === "g" && r.V0 === prefixedRole && this.isTenantValue(tenantId, r.V1))
-				.map(r => this.stripTenant(tenantId, r.V1));
+			const rules = await this.getAllRawPolicies(modelId);
+			return rules.filter(r => r.Ptype === "g" && r.V0 === role).map(r => r.V1);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -896,20 +790,18 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 
 	/**
 	 * Get all roles that directly inherit from a given role.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param role The role to query.
 	 * @returns The child roles.
 	 * @throws GeneralError if the query fails.
 	 */
-	public async getChildRoles(role: string): Promise<string[]> {
+	public async getChildRoles(modelId: string, role: string): Promise<string[]> {
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
 
 		try {
-			const tenantId = await this.getTenantId();
-			const prefixedRole = this.applyTenant(tenantId, role);
-			const rules = await this.getAllRawPolicies();
-			return rules
-				.filter(r => r.Ptype === "g" && r.V1 === prefixedRole && this.isTenantValue(tenantId, r.V0))
-				.map(r => this.stripTenant(tenantId, r.V0));
+			const rules = await this.getAllRawPolicies(modelId);
+			return rules.filter(r => r.Ptype === "g" && r.V1 === role).map(r => r.V0);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -924,72 +816,138 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	}
 
 	/**
-	 * Get the tenant ID from the ambient context store.
-	 * @returns The tenant ID string, or undefined when no tenant context is active.
+	 * Get the URL-encoded enforcer ID from the ambient tenant context and the given model identifier.
+	 * @param modelId The model identifier.
+	 * @param encode Whether to URL-encode the result (default: true).
+	 * @returns The URL-encoded enforcer ID in the form owner/modelId.
 	 * @internal
 	 */
-	private async getTenantId(): Promise<string | undefined> {
+	private async getEncodedEnforcerId(modelId: string, encode?: boolean): Promise<string> {
+		const tenantId = await this.getTenantId();
+		const enforcerId = `${tenantId}/${modelId}`;
+		return encode === false ? enforcerId : encodeURIComponent(enforcerId);
+	}
+
+	/**
+	 * Get the tenant ID from the ambient context.
+	 * @returns The tenant ID.
+	 * @internal
+	 */
+	private async getTenantId(): Promise<string> {
 		const contextIds = await ContextIdStore.getContextIds();
 		const tenantId = contextIds?.[ContextIdKeys.Tenant];
-		return Is.stringValue(tenantId) ? tenantId : undefined;
+		return Is.stringValue(tenantId) ? tenantId : "root";
 	}
 
 	/**
-	 * Prefix a value with the tenant ID when a tenant is active.
-	 * @param tenantId The active tenant ID, or undefined.
-	 * @param value The value to prefix.
-	 * @returns The prefixed value, or the original value when no tenant is active.
+	 * Ensure that a Casdoor enforcer exists for the current tenant and model.
+	 * Checks that the shared RBAC model exists and creates a dedicated adapter and enforcer if
+	 * the tenant-specific enforcer does not exist.
+	 * @param modelId The model identifier (used as the enforcer name within the tenant owner).
 	 * @internal
 	 */
-	private applyTenant(tenantId: string | undefined, value: string): string {
-		return tenantId !== undefined ? `${tenantId}:${value}` : value;
-	}
-
-	/**
-	 * Strip the tenant prefix from a value when a tenant is active.
-	 * @param tenantId The active tenant ID, or undefined.
-	 * @param value The value to strip.
-	 * @returns The value with the tenant prefix removed, or the original value when no tenant is active.
-	 * @internal
-	 */
-	private stripTenant(tenantId: string | undefined, value: string): string {
-		if (tenantId === undefined) {
-			return value;
+	private async ensureEnforcer(modelId: string): Promise<void> {
+		const enforcerId = await this.getEncodedEnforcerId(modelId, false);
+		if (this._provisionedEnforcers.has(enforcerId)) {
+			return;
 		}
-		const prefix = `${tenantId}:`;
-		return value.startsWith(prefix) ? value.slice(prefix.length) : value;
-	}
 
-	/**
-	 * Return true when a value belongs to the current tenant (or no tenant is active).
-	 * @param tenantId The active tenant ID, or undefined.
-	 * @param value The value to test.
-	 * @returns True if the value belongs to the current tenant.
-	 * @internal
-	 */
-	private isTenantValue(tenantId: string | undefined, value: string): boolean {
-		return tenantId === undefined || value.startsWith(`${tenantId}:`);
-	}
-
-	/**
-	 * Fetch all raw policy rules from the Casdoor enforcer.
-	 * @returns All rules (both "p" permission and "g" grouping types).
-	 * @throws GeneralError if the fetch fails.
-	 * @internal
-	 */
-	private async getAllRawPolicies(): Promise<ICasdoorPolicyRule[]> {
-		const response = await FetchHelper.fetchJson<
+		const checkResponse = await FetchHelper.fetchJson<
 			never,
-			ICasbinServerResponse<ICasdoorPolicyRule[]>
+			ICasbinServerResponse<{ owner: string } | null>
 		>(
 			CasbinAuthorizationConnector.CLASS_NAME,
-			`${this._baseUrl}/api/get-policies?id=${this._encodedEnforcerId}`,
+			`${this._baseUrl}/api/get-enforcer?id=${encodeURIComponent(enforcerId)}`,
 			HttpMethod.GET,
 			undefined,
 			this._requestOptions
 		);
 
-		this.assertOk(response, "getAllPoliciesFailed");
+		if (checkResponse.status === "ok" && checkResponse.data !== null) {
+			this._provisionedEnforcers.add(enforcerId);
+			return;
+		}
+
+		const tenantId = await this.getTenantId();
+		const name = modelId;
+		const tenantName = `${tenantId}-${name}`;
+		const adapterName = `adapter-${tenantName}`;
+		const tableName = `casbin_${tenantName.replace(/[^a-zA-Z0-9]/g, "_")}`;
+		const casdoorModelId = "built-in/user-model-built-in";
+		const modelResponse = await FetchHelper.fetchJson<
+			never,
+			ICasbinServerResponse<{ owner: string; name: string } | null>
+		>(
+			CasbinAuthorizationConnector.CLASS_NAME,
+			`${this._baseUrl}/api/get-model?id=${encodeURIComponent(casdoorModelId)}`,
+			HttpMethod.GET,
+			undefined,
+			this._requestOptions
+		);
+
+		if (modelResponse.status !== "ok" || modelResponse.data === null) {
+			throw new GeneralError(CasbinAuthorizationConnector.CLASS_NAME, "ensureModelFailed", {
+				modelId: casdoorModelId,
+				serverMsg: modelResponse.msg
+			});
+		}
+
+		await FetchHelper.fetchJson<
+			{ owner: string; name: string; table: string; useSameDb: boolean },
+			ICasbinServerResponse<null>
+		>(
+			CasbinAuthorizationConnector.CLASS_NAME,
+			`${this._baseUrl}/api/add-adapter`,
+			HttpMethod.POST,
+			{ owner: tenantId, name: adapterName, table: tableName, useSameDb: true },
+			this._requestOptions
+		);
+
+		await FetchHelper.fetchJson<
+			{ owner: string; name: string; model: string; adapter: string; isEnabled: boolean },
+			ICasbinServerResponse<null>
+		>(
+			CasbinAuthorizationConnector.CLASS_NAME,
+			`${this._baseUrl}/api/add-enforcer`,
+			HttpMethod.POST,
+			{
+				owner: tenantId,
+				name,
+				model: casdoorModelId,
+				adapter: `${tenantId}/${adapterName}`,
+				isEnabled: true
+			},
+			this._requestOptions
+		);
+
+		this._provisionedEnforcers.add(enforcerId);
+	}
+
+	/**
+	 * Fetch all raw policy rules from the Casdoor enforcer for the given model.
+	 * Returns an empty array when the enforcer does not yet exist.
+	 * @param modelId The model identifier.
+	 * @returns All rules (both "p" permission and "g" grouping types).
+	 * @internal
+	 */
+	private async getAllRawPolicies(modelId: string): Promise<ICasdoorPolicyRule[]> {
+		await this.ensureEnforcer(modelId);
+
+		const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
+		const response = await FetchHelper.fetchJson<
+			never,
+			ICasbinServerResponse<ICasdoorPolicyRule[]>
+		>(
+			CasbinAuthorizationConnector.CLASS_NAME,
+			`${this._baseUrl}/api/get-policies?id=${encodedEnforcerId}`,
+			HttpMethod.GET,
+			undefined,
+			this._requestOptions
+		);
+
+		if (response.status !== "ok") {
+			return [];
+		}
 		return response.data ?? [];
 	}
 

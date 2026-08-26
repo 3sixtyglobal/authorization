@@ -10,6 +10,11 @@ export interface IAuthorizationRemoveRoleInheritanceRequest {
 	 */
 	pathParams: {
 		/**
+		 * The model identifier selecting which policy set to use.
+		 */
+		modelId: string;
+
+		/**
 		 * The role to remove the inheritance from.
 		 */
 		role: string;

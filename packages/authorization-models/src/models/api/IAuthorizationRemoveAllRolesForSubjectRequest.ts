@@ -10,6 +10,11 @@ export interface IAuthorizationRemoveAllRolesForSubjectRequest {
 	 */
 	pathParams: {
 		/**
+		 * The model identifier selecting which policy set to use.
+		 */
+		modelId: string;
+
+		/**
 		 * The subject to remove all roles from.
 		 */
 		subject: string;

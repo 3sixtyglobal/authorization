@@ -21,10 +21,8 @@ Guards.stringValue("TestEnv", "TEST_DOCKER_CONTAINER_NAME", process.env.TEST_DOC
 
 const TEST_CONTAINER_NAME = process.env.TEST_DOCKER_CONTAINER_NAME;
 const DB_CONTAINER_PATH = "/casdoor.db";
-const ENFORCER_ID = "built-in/user-enforcer-built-in";
 
 export const TEST_CASBIN_ENDPOINT = process.env.TEST_CASBIN_ENDPOINT;
-export const TEST_CASBIN_ENFORCER_ID = ENFORCER_ID;
 
 /**
  * Reads the Casdoor client ID and client secret from the Casdoor database inside the Docker container.

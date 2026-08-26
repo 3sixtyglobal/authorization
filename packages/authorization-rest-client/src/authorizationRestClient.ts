@@ -6,8 +6,6 @@ import type {
 	IAuthorizationAddPolicyRequest,
 	IAuthorizationAddRoleForSubjectRequest,
 	IAuthorizationAddRoleInheritanceRequest,
-	IAuthorizationCheckAnyRequest,
-	IAuthorizationCheckAnyResponse,
 	IAuthorizationCheckRequest,
 	IAuthorizationCheckResponse,
 	IAuthorizationComponent,
@@ -66,107 +64,133 @@ export class AuthorizationRestClient extends BaseRestClient implements IAuthoriz
 
 	/**
 	 * Check whether a subject is permitted to perform an action on a resource.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject requesting access.
 	 * @param object The object being accessed.
 	 * @param action The action to check.
 	 * @returns True if access is granted, false otherwise.
 	 */
-	public async check(subject: string, object: string, action: string): Promise<boolean> {
+	public async check(
+		modelId: string,
+		subject: string,
+		object: string,
+		action: string
+	): Promise<boolean> {
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(subject), subject);
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(object), object);
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(action), action);
 
 		const response = await this.fetch<IAuthorizationCheckRequest, IAuthorizationCheckResponse>(
-			"/check",
+			"/:modelId/check",
 			HttpMethod.POST,
-			{ body: { subject, object, action } }
+			{ pathParams: { modelId }, body: { subject, object, action } }
 		);
-
-		return response.body.allowed;
-	}
-
-	/**
-	 * Check whether any of the given subjects are permitted to perform an action on a resource.
-	 * @param subjects The subjects to check.
-	 * @param object The object being accessed.
-	 * @param action The action to check.
-	 * @returns True if access is granted for at least one subject, false otherwise.
-	 */
-	public async checkAny(subjects: string[], object: string, action: string): Promise<boolean> {
-		Guards.array<string>(AuthorizationRestClient.CLASS_NAME, nameof(subjects), subjects);
-		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(object), object);
-		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(action), action);
-
-		const response = await this.fetch<
-			IAuthorizationCheckAnyRequest,
-			IAuthorizationCheckAnyResponse
-		>("/check-any", HttpMethod.POST, { body: { subjects, object, action } });
 
 		return response.body.allowed;
 	}
 
 	/**
 	 * Add a policy rule.
-	 * @param policy The policy to add.
+	 * @param modelId The model identifier selecting which policy set to use.
+	 * @param subject The subject the policy applies to.
+	 * @param object The object the policy applies to.
+	 * @param action The action the policy applies to.
 	 * @returns Nothing.
 	 */
-	public async addPolicy(policy: IAuthorizationPolicy): Promise<void> {
-		Guards.object(AuthorizationRestClient.CLASS_NAME, nameof(policy), policy);
+	public async addPolicy(
+		modelId: string,
+		subject: string,
+		object: string,
+		action: string
+	): Promise<void> {
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(modelId), modelId);
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(subject), subject);
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(object), object);
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(action), action);
 
 		await this.fetch<IAuthorizationAddPolicyRequest, INoContentResponse>(
-			"/policy",
+			"/:modelId/policy",
 			HttpMethod.POST,
-			{ body: policy }
+			{ pathParams: { modelId }, body: { subject, object, action } }
 		);
 	}
 
 	/**
 	 * Remove a policy rule.
-	 * @param policy The policy to remove.
+	 * @param modelId The model identifier selecting which policy set to use.
+	 * @param subject The subject of the policy to remove.
+	 * @param object The object of the policy to remove.
+	 * @param action The action of the policy to remove.
 	 * @returns Nothing.
 	 */
-	public async removePolicy(policy: IAuthorizationPolicy): Promise<void> {
-		Guards.object(AuthorizationRestClient.CLASS_NAME, nameof(policy), policy);
+	public async removePolicy(
+		modelId: string,
+		subject: string,
+		object: string,
+		action: string
+	): Promise<void> {
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(modelId), modelId);
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(subject), subject);
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(object), object);
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(action), action);
 
 		await this.fetch<IAuthorizationRemovePolicyRequest, INoContentResponse>(
-			"/policy/remove",
+			"/:modelId/policy/remove",
 			HttpMethod.POST,
-			{ body: policy }
+			{ pathParams: { modelId }, body: { subject, object, action } }
 		);
 	}
 
 	/**
 	 * Get all policy rules for a given subject.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject to query.
-	 * @returns The matching policies.
+	 * @param cursor The cursor to request the next chunk of results.
+	 * @param limit Limit the number of entities to return.
+	 * @returns The matching policies and an optional cursor for the next page.
 	 */
-	public async getPoliciesForSubject(subject: string): Promise<IAuthorizationPolicy[]> {
+	public async getPoliciesForSubject(
+		modelId: string,
+		subject: string,
+		cursor?: string,
+		limit?: number
+	): Promise<{ entities: IAuthorizationPolicy[]; cursor?: string }> {
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(subject), subject);
 
 		const response = await this.fetch<
 			IAuthorizationGetPoliciesForSubjectRequest,
 			IAuthorizationGetPoliciesForSubjectResponse
-		>("/policy/:subject", HttpMethod.GET, { pathParams: { subject } });
+		>("/:modelId/policy/:subject", HttpMethod.GET, {
+			pathParams: { modelId, subject },
+			query: { cursor, limit: limit !== undefined ? String(limit) : undefined }
+		});
 
-		return response.body.policies;
+		return response.body;
 	}
 
 	/**
 	 * Get policy rules, optionally filtered by subject.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject Optional subject to filter by.
 	 * @param cursor The cursor to request the next chunk of results.
 	 * @param limit Limit the number of entities to return.
 	 * @returns The matching policies and an optional cursor for the next page.
 	 */
 	public async getAllPolicies(
+		modelId: string,
 		subject?: string,
 		cursor?: string,
 		limit?: number
 	): Promise<{ entities: IAuthorizationPolicy[]; cursor?: string }> {
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(modelId), modelId);
+
 		const response = await this.fetch<
 			IAuthorizationGetAllPoliciesRequest,
 			IAuthorizationGetAllPoliciesResponse
-		>("/policy", HttpMethod.GET, {
+		>("/:modelId/policy", HttpMethod.GET, {
+			pathParams: { modelId },
 			query: {
 				subject,
 				cursor,
@@ -179,18 +203,23 @@ export class AuthorizationRestClient extends BaseRestClient implements IAuthoriz
 
 	/**
 	 * Get all distinct role names in the system.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param cursor The cursor to request the next chunk of results.
 	 * @param limit Limit the number of roles to return.
 	 * @returns The role names and an optional cursor for the next page.
 	 */
 	public async getAllRoles(
+		modelId: string,
 		cursor?: string,
 		limit?: number
 	): Promise<{ roles: string[]; cursor?: string }> {
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(modelId), modelId);
+
 		const response = await this.fetch<
 			IAuthorizationGetAllRolesRequest,
 			IAuthorizationGetAllRolesResponse
-		>("/roles", HttpMethod.GET, {
+		>("/:modelId/roles", HttpMethod.GET, {
+			pathParams: { modelId },
 			query: {
 				cursor,
 				limit: limit !== undefined ? String(limit) : undefined
@@ -202,181 +231,213 @@ export class AuthorizationRestClient extends BaseRestClient implements IAuthoriz
 
 	/**
 	 * Check whether each of the given role names exists in the system.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param roles The role names to check.
 	 * @returns An array of booleans in the same order as the input.
 	 */
-	public async hasRoles(roles: string[]): Promise<boolean[]> {
+	public async hasRoles(modelId: string, roles: string[]): Promise<boolean[]> {
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(modelId), modelId);
 		Guards.array<string>(AuthorizationRestClient.CLASS_NAME, nameof(roles), roles);
 
 		const response = await this.fetch<
 			IAuthorizationHasRolesRequest,
 			IAuthorizationHasRolesResponse
-		>("/roles/has", HttpMethod.POST, { body: { roles } });
+		>("/:modelId/roles/has", HttpMethod.POST, { pathParams: { modelId }, body: { roles } });
 
 		return response.body.exists;
 	}
 
 	/**
 	 * Assign a role to a subject.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject to assign the role to.
 	 * @param role The role to assign.
 	 * @returns Nothing.
 	 */
-	public async addRoleForSubject(subject: string, role: string): Promise<void> {
+	public async addRoleForSubject(modelId: string, subject: string, role: string): Promise<void> {
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(subject), subject);
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(role), role);
 
 		await this.fetch<IAuthorizationAddRoleForSubjectRequest, INoContentResponse>(
-			"/subject/:subject/role",
+			"/:modelId/subject/:subject/role",
 			HttpMethod.POST,
-			{ pathParams: { subject }, body: { role } }
+			{ pathParams: { modelId, subject }, body: { role } }
 		);
 	}
 
 	/**
 	 * Remove a role from a subject.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject to remove the role from.
 	 * @param role The role to remove.
 	 * @returns Nothing.
 	 */
-	public async removeRoleForSubject(subject: string, role: string): Promise<void> {
+	public async removeRoleForSubject(modelId: string, subject: string, role: string): Promise<void> {
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(subject), subject);
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(role), role);
 
 		await this.fetch<IAuthorizationRemoveRoleForSubjectRequest, INoContentResponse>(
-			"/subject/:subject/role/:role",
+			"/:modelId/subject/:subject/role/:role",
 			HttpMethod.DELETE,
-			{ pathParams: { subject, role } }
+			{ pathParams: { modelId, subject, role } }
 		);
 	}
 
 	/**
 	 * Remove all roles from a subject.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject to remove all roles from.
 	 * @returns Nothing.
 	 */
-	public async removeAllRolesForSubject(subject: string): Promise<void> {
+	public async removeAllRolesForSubject(modelId: string, subject: string): Promise<void> {
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(subject), subject);
 
 		await this.fetch<IAuthorizationRemoveAllRolesForSubjectRequest, INoContentResponse>(
-			"/subject/:subject/roles",
+			"/:modelId/subject/:subject/roles",
 			HttpMethod.DELETE,
-			{ pathParams: { subject } }
+			{ pathParams: { modelId, subject } }
 		);
 	}
 
 	/**
 	 * Get all roles assigned to a subject.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject to query.
 	 * @returns The assigned roles.
 	 */
-	public async getRolesForSubject(subject: string): Promise<string[]> {
+	public async getRolesForSubject(modelId: string, subject: string): Promise<string[]> {
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(subject), subject);
 
 		const response = await this.fetch<
 			IAuthorizationGetRolesForSubjectRequest,
 			IAuthorizationGetRolesForSubjectResponse
-		>("/subject/:subject/roles", HttpMethod.GET, { pathParams: { subject } });
+		>("/:modelId/subject/:subject/roles", HttpMethod.GET, { pathParams: { modelId, subject } });
 
 		return response.body.roles;
 	}
 
 	/**
 	 * Get all subjects assigned to a given role.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param role The role to query.
 	 * @returns The subjects with the given role.
 	 */
-	public async getSubjectsForRole(role: string): Promise<string[]> {
+	public async getSubjectsForRole(modelId: string, role: string): Promise<string[]> {
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(role), role);
 
 		const response = await this.fetch<
 			IAuthorizationGetSubjectsForRoleRequest,
 			IAuthorizationGetSubjectsForRoleResponse
-		>("/role/:role/subjects", HttpMethod.GET, { pathParams: { role } });
+		>("/:modelId/role/:role/subjects", HttpMethod.GET, { pathParams: { modelId, role } });
 
 		return response.body.subjects;
 	}
 
 	/**
 	 * Check whether a subject has a specific role.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject to check.
 	 * @param role The role to check for.
 	 * @returns True if the subject has the role.
 	 */
-	public async hasRoleForSubject(subject: string, role: string): Promise<boolean> {
+	public async hasRoleForSubject(modelId: string, subject: string, role: string): Promise<boolean> {
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(subject), subject);
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(role), role);
 
 		const response = await this.fetch<
 			IAuthorizationHasRoleForSubjectRequest,
 			IAuthorizationHasRoleForSubjectResponse
-		>("/subject/:subject/role/:role", HttpMethod.GET, { pathParams: { subject, role } });
+		>("/:modelId/subject/:subject/role/:role", HttpMethod.GET, {
+			pathParams: { modelId, subject, role }
+		});
 
 		return response.body.hasRole;
 	}
 
 	/**
 	 * Define a parent-child inheritance relationship between two roles.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param role The child role that will inherit permissions from the parent.
 	 * @param inheritsFrom The parent role whose permissions are inherited.
 	 * @returns Nothing.
 	 */
-	public async addRoleInheritance(role: string, inheritsFrom: string): Promise<void> {
+	public async addRoleInheritance(
+		modelId: string,
+		role: string,
+		inheritsFrom: string
+	): Promise<void> {
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(role), role);
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(inheritsFrom), inheritsFrom);
 
 		await this.fetch<IAuthorizationAddRoleInheritanceRequest, INoContentResponse>(
-			"/role/:role/inherit",
+			"/:modelId/role/:role/inherit",
 			HttpMethod.POST,
-			{ pathParams: { role }, body: { inheritsFrom } }
+			{ pathParams: { modelId, role }, body: { inheritsFrom } }
 		);
 	}
 
 	/**
 	 * Remove a parent-child inheritance relationship between two roles.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param role The child role.
 	 * @param inheritsFrom The parent role to stop inheriting from.
 	 * @returns Nothing.
 	 */
-	public async removeRoleInheritance(role: string, inheritsFrom: string): Promise<void> {
+	public async removeRoleInheritance(
+		modelId: string,
+		role: string,
+		inheritsFrom: string
+	): Promise<void> {
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(role), role);
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(inheritsFrom), inheritsFrom);
 
 		await this.fetch<IAuthorizationRemoveRoleInheritanceRequest, INoContentResponse>(
-			"/role/:role/inherit/:inheritsFrom",
+			"/:modelId/role/:role/inherit/:inheritsFrom",
 			HttpMethod.DELETE,
-			{ pathParams: { role, inheritsFrom } }
+			{ pathParams: { modelId, role, inheritsFrom } }
 		);
 	}
 
 	/**
 	 * Get all roles that a given role directly inherits from.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param role The role to query.
 	 * @returns The parent roles.
 	 */
-	public async getParentRoles(role: string): Promise<string[]> {
+	public async getParentRoles(modelId: string, role: string): Promise<string[]> {
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(role), role);
 
 		const response = await this.fetch<
 			IAuthorizationGetParentRolesRequest,
 			IAuthorizationGetParentRolesResponse
-		>("/role/:role/parents", HttpMethod.GET, { pathParams: { role } });
+		>("/:modelId/role/:role/parents", HttpMethod.GET, { pathParams: { modelId, role } });
 
 		return response.body.roles;
 	}
 
 	/**
 	 * Get all roles that directly inherit from a given role.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param role The role to query.
 	 * @returns The child roles.
 	 */
-	public async getChildRoles(role: string): Promise<string[]> {
+	public async getChildRoles(modelId: string, role: string): Promise<string[]> {
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(role), role);
 
 		const response = await this.fetch<
 			IAuthorizationGetChildRolesRequest,
 			IAuthorizationGetChildRolesResponse
-		>("/role/:role/children", HttpMethod.GET, { pathParams: { role } });
+		>("/:modelId/role/:role/children", HttpMethod.GET, { pathParams: { modelId, role } });
 
 		return response.body.roles;
 	}

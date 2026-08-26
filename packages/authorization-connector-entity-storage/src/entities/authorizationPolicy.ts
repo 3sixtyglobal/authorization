@@ -8,10 +8,16 @@ import { entity, property } from "@twin.org/entity";
 @entity()
 export class AuthorizationPolicy {
 	/**
-	 * The compound identifier for this policy rule, in "subject|object|action" format.
+	 * The compound identifier for this policy rule, in "modelId|subject|object|action" format.
 	 */
 	@property({ type: "string", isPrimary: true })
 	public id!: string;
+
+	/**
+	 * The model identifier partitioning this policy.
+	 */
+	@property({ type: "string", isSecondary: true })
+	public modelId!: string;
 
 	/**
 	 * The subject (user, service, or role) the policy applies to.

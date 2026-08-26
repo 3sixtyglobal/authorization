@@ -11,8 +11,7 @@ const connector = new CasbinAuthorizationConnector({
   config: {
     endpoint: 'https://casbin.example.net',
     clientId: 'service-client',
-    clientSecret: 'service-secret',
-    enforcerId: 'built-in/default'
+    clientSecret: 'service-secret'
   }
 });
 
@@ -29,18 +28,17 @@ const connector = new CasbinAuthorizationConnector({
   config: {
     endpoint: 'https://casbin.example.net',
     clientId: 'service-client',
-    clientSecret: 'service-secret',
-    enforcerId: 'built-in/default'
+    clientSecret: 'service-secret'
   }
 });
 
-await connector.addPolicy({ subject: 'admin', object: 'reports', action: 'delete' });
+await connector.addPolicy('admin', 'reports', 'delete');
 await connector.addRoleForSubject('alice', 'admin');
 
 const allowed = await connector.check('alice', 'reports', 'delete');
 console.log(allowed); // true
 
-await connector.removePolicy({ subject: 'admin', object: 'reports', action: 'delete' });
+await connector.removePolicy('admin', 'reports', 'delete');
 ```
 
 ```typescript
@@ -50,13 +48,12 @@ const connector = new CasbinAuthorizationConnector({
   config: {
     endpoint: 'https://casbin.example.net',
     clientId: 'service-client',
-    clientSecret: 'service-secret',
-    enforcerId: 'built-in/default'
+    clientSecret: 'service-secret'
   }
 });
 
-await connector.addPolicy({ subject: 'viewer', object: 'dashboard', action: 'read' });
-await connector.addPolicy({ subject: 'viewer', object: 'dashboard', action: 'export' });
+await connector.addPolicy('viewer', 'dashboard', 'read');
+await connector.addPolicy('viewer', 'dashboard', 'export');
 
 const pageOne = await connector.getAllPolicies('viewer', undefined, 1);
 console.log(pageOne.entities); // [{ subject: "viewer", object: "dashboard", action: "read" }]
@@ -66,7 +63,7 @@ const pageTwo = await connector.getAllPolicies('viewer', pageOne.cursor, 1);
 console.log(pageTwo.entities); // [{ subject: "viewer", object: "dashboard", action: "export" }]
 
 const policiesForViewer = await connector.getPoliciesForSubject('viewer');
-console.log(policiesForViewer.length); // 2
+console.log(policiesForViewer.entities.length); // 2
 ```
 
 ```typescript
@@ -76,8 +73,7 @@ const connector = new CasbinAuthorizationConnector({
   config: {
     endpoint: 'https://casbin.example.net',
     clientId: 'service-client',
-    clientSecret: 'service-secret',
-    enforcerId: 'built-in/default'
+    clientSecret: 'service-secret'
   }
 });
 

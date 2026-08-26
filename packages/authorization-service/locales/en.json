@@ -3,7 +3,6 @@
 		"authorizationService": {
 			"noConnectors": "There are no connectors registered with the authorization factory",
 			"checkFailed": "The authorization check failed",
-			"checkAnyFailed": "The authorization check for any subject failed",
 			"addPolicyFailed": "The addition of the policy failed",
 			"removePolicyFailed": "The removal of the policy failed",
 			"getPoliciesForSubjectFailed": "The retrieval of policies for the subject failed",
@@ -21,7 +20,7 @@
 			"getParentRolesFailed": "The retrieval of parent roles failed",
 			"getChildRolesFailed": "The retrieval of child roles failed"
 		},
-		"authorizationProcessor": {
+		"authorizationRestProcessor": {
 			"routeIdMissing": "The route ID is missing",
 			"accessDenied": "Access denied for the user to the route"
 		}

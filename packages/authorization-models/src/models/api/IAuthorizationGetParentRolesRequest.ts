@@ -10,6 +10,11 @@ export interface IAuthorizationGetParentRolesRequest {
 	 */
 	pathParams: {
 		/**
+		 * The model identifier selecting which policy set to use.
+		 */
+		modelId: string;
+
+		/**
 		 * The role to get parent roles for.
 		 */
 		role: string;

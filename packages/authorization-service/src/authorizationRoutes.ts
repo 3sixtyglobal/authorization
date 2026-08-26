@@ -10,8 +10,6 @@ import type {
 	IAuthorizationAddPolicyRequest,
 	IAuthorizationAddRoleForSubjectRequest,
 	IAuthorizationAddRoleInheritanceRequest,
-	IAuthorizationCheckAnyRequest,
-	IAuthorizationCheckAnyResponse,
 	IAuthorizationCheckRequest,
 	IAuthorizationCheckResponse,
 	IAuthorizationComponent,
@@ -38,7 +36,7 @@ import type {
 	IAuthorizationRemoveRoleForSubjectRequest,
 	IAuthorizationRemoveRoleInheritanceRequest
 } from "@twin.org/authorization-models";
-import { ComponentFactory, Guards } from "@twin.org/core";
+import { Coerce, ComponentFactory, Guards } from "@twin.org/core";
 import { nameof } from "@twin.org/nameof";
 import { HttpStatusCode } from "@twin.org/web";
 
@@ -51,15 +49,6 @@ const DEFAULT_ROUTE_PERMISSIONS_READER = "authorization:read";
 const DEFAULT_ROUTE_PERMISSIONS_WRITER = {
 	permission: "authorization:write",
 	inherits: [DEFAULT_ROUTE_PERMISSIONS_READER]
-};
-
-/**
- * The default roles for the routes, used to seed authorization rules.
- */
-const DEFAULT_ROUTE_ROLES_READER = "authorization-viewer";
-const DEFAULT_ROUTE_ROLES_WRITER = {
-	role: "authorization-admin",
-	inherits: [DEFAULT_ROUTE_ROLES_READER]
 };
 
 /**
@@ -87,7 +76,7 @@ export function generateRestRoutesAuthorization(
 		summary: "Check an authorization policy",
 		tag: tagsAuthorization[0].name,
 		method: "POST",
-		path: `${baseRouteName}/check`,
+		path: `${baseRouteName}/:modelId/check`,
 		handler: async (httpRequestContext, request) =>
 			authorizationCheck(httpRequestContext, componentName, request),
 		requestType: {
@@ -96,6 +85,9 @@ export function generateRestRoutesAuthorization(
 				{
 					id: "authorizationCheckExample",
 					request: {
+						pathParams: {
+							modelId: "default"
+						},
 						body: {
 							subject: "user1",
 							object: "/data",
@@ -120,50 +112,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
-		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
-	};
-
-	const checkAnyRoute: IRestRoute<IAuthorizationCheckAnyRequest, IAuthorizationCheckAnyResponse> = {
-		operationId: "authorizationCheckAny",
-		summary: "Check an authorization policy for any of a list of subjects",
-		tag: tagsAuthorization[0].name,
-		method: "POST",
-		path: `${baseRouteName}/check-any`,
-		handler: async (httpRequestContext, request) =>
-			authorizationCheckAny(httpRequestContext, componentName, request),
-		requestType: {
-			type: nameof<IAuthorizationCheckAnyRequest>(),
-			examples: [
-				{
-					id: "authorizationCheckAnyExample",
-					request: {
-						body: {
-							subjects: ["user1", "user2"],
-							object: "/data",
-							action: "read"
-						}
-					}
-				}
-			]
-		},
-		responseType: [
-			{
-				type: nameof<IAuthorizationCheckAnyResponse>(),
-				examples: [
-					{
-						id: "authorizationCheckAnyResponseExample",
-						response: {
-							body: {
-								allowed: true
-							}
-						}
-					}
-				]
-			}
-		],
-		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
-		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
+		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_READER
 	};
 
 	const addPolicyRoute: IRestRoute<IAuthorizationAddPolicyRequest, INoContentResponse> = {
@@ -171,7 +120,7 @@ export function generateRestRoutesAuthorization(
 		summary: "Add an authorization policy",
 		tag: tagsAuthorization[0].name,
 		method: "POST",
-		path: `${baseRouteName}/policy`,
+		path: `${baseRouteName}/:modelId/policy`,
 		handler: async (httpRequestContext, request) =>
 			authorizationAddPolicy(httpRequestContext, componentName, request),
 		requestType: {
@@ -180,6 +129,9 @@ export function generateRestRoutesAuthorization(
 				{
 					id: "authorizationAddPolicyExample",
 					request: {
+						pathParams: {
+							modelId: "default"
+						},
 						body: {
 							subject: "user1",
 							object: "/data",
@@ -202,8 +154,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_WRITER],
-		defaultRoles: [DEFAULT_ROUTE_ROLES_WRITER]
+		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_WRITER
 	};
 
 	const removePolicyRoute: IRestRoute<IAuthorizationRemovePolicyRequest, INoContentResponse> = {
@@ -211,7 +162,7 @@ export function generateRestRoutesAuthorization(
 		summary: "Remove an authorization policy",
 		tag: tagsAuthorization[0].name,
 		method: "POST",
-		path: `${baseRouteName}/policy/remove`,
+		path: `${baseRouteName}/:modelId/policy/remove`,
 		handler: async (httpRequestContext, request) =>
 			authorizationRemovePolicy(httpRequestContext, componentName, request),
 		requestType: {
@@ -220,6 +171,9 @@ export function generateRestRoutesAuthorization(
 				{
 					id: "authorizationRemovePolicyExample",
 					request: {
+						pathParams: {
+							modelId: "default"
+						},
 						body: {
 							subject: "user1",
 							object: "/data",
@@ -242,8 +196,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_WRITER],
-		defaultRoles: [DEFAULT_ROUTE_ROLES_WRITER]
+		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_WRITER
 	};
 
 	const getAllPoliciesRoute: IRestRoute<
@@ -254,7 +207,7 @@ export function generateRestRoutesAuthorization(
 		summary: "Get all authorization policies",
 		tag: tagsAuthorization[0].name,
 		method: "GET",
-		path: `${baseRouteName}/policy`,
+		path: `${baseRouteName}/:modelId/policy`,
 		handler: async (httpRequestContext, request) =>
 			authorizationGetAllPolicies(httpRequestContext, componentName, request),
 		requestType: {
@@ -263,6 +216,7 @@ export function generateRestRoutesAuthorization(
 				{
 					id: "authorizationGetAllPoliciesExample",
 					request: {
+						pathParams: { modelId: "default" },
 						query: { subject: "user1", limit: "20" }
 					}
 				}
@@ -283,8 +237,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
-		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
+		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_READER
 	};
 
 	const getAllRolesRoute: IRestRoute<
@@ -295,7 +248,7 @@ export function generateRestRoutesAuthorization(
 		summary: "Get all authorization roles",
 		tag: tagsAuthorization[0].name,
 		method: "GET",
-		path: `${baseRouteName}/roles`,
+		path: `${baseRouteName}/:modelId/roles`,
 		handler: async (httpRequestContext, request) =>
 			authorizationGetAllRoles(httpRequestContext, componentName, request),
 		requestType: {
@@ -304,6 +257,7 @@ export function generateRestRoutesAuthorization(
 				{
 					id: "authorizationGetAllRolesExample",
 					request: {
+						pathParams: { modelId: "default" },
 						query: { limit: "20" }
 					}
 				}
@@ -324,8 +278,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
-		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
+		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_READER
 	};
 
 	const hasRolesRoute: IRestRoute<IAuthorizationHasRolesRequest, IAuthorizationHasRolesResponse> = {
@@ -333,7 +286,7 @@ export function generateRestRoutesAuthorization(
 		summary: "Check whether a list of roles exist in the system",
 		tag: tagsAuthorization[0].name,
 		method: "POST",
-		path: `${baseRouteName}/roles/has`,
+		path: `${baseRouteName}/:modelId/roles/has`,
 		handler: async (httpRequestContext, request) =>
 			authorizationHasRoles(httpRequestContext, componentName, request),
 		requestType: {
@@ -342,6 +295,7 @@ export function generateRestRoutesAuthorization(
 				{
 					id: "authorizationHasRolesExample",
 					request: {
+						pathParams: { modelId: "default" },
 						body: {
 							roles: ["admin", "editor", "unknown-role"]
 						}
@@ -364,8 +318,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
-		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
+		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_READER
 	};
 
 	const getPoliciesForSubjectRoute: IRestRoute<
@@ -376,7 +329,7 @@ export function generateRestRoutesAuthorization(
 		summary: "Get authorization policies for a subject",
 		tag: tagsAuthorization[0].name,
 		method: "GET",
-		path: `${baseRouteName}/policy/:subject`,
+		path: `${baseRouteName}/:modelId/policy/:subject`,
 		handler: async (httpRequestContext, request) =>
 			authorizationGetPoliciesForSubject(httpRequestContext, componentName, request),
 		requestType: {
@@ -386,6 +339,7 @@ export function generateRestRoutesAuthorization(
 					id: "authorizationGetPoliciesForSubjectExample",
 					request: {
 						pathParams: {
+							modelId: "default",
 							subject: "user1"
 						}
 					}
@@ -400,15 +354,14 @@ export function generateRestRoutesAuthorization(
 						id: "authorizationGetPoliciesForSubjectResponseExample",
 						response: {
 							body: {
-								policies: [{ subject: "user1", object: "/data", action: "read" }]
+								entities: [{ subject: "user1", object: "/data", action: "read" }]
 							}
 						}
 					}
 				]
 			}
 		],
-		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
-		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
+		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_READER
 	};
 
 	const addRoleForSubjectRoute: IRestRoute<
@@ -419,7 +372,7 @@ export function generateRestRoutesAuthorization(
 		summary: "Add a role for a subject",
 		tag: tagsAuthorization[0].name,
 		method: "POST",
-		path: `${baseRouteName}/subject/:subject/role`,
+		path: `${baseRouteName}/:modelId/subject/:subject/role`,
 		handler: async (httpRequestContext, request) =>
 			authorizationAddRoleForSubject(httpRequestContext, componentName, request),
 		requestType: {
@@ -428,7 +381,7 @@ export function generateRestRoutesAuthorization(
 				{
 					id: "authorizationAddRoleForSubjectExample",
 					request: {
-						pathParams: { subject: "user1" },
+						pathParams: { modelId: "default", subject: "user1" },
 						body: { role: "admin" }
 					}
 				}
@@ -445,8 +398,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_WRITER],
-		defaultRoles: [DEFAULT_ROUTE_ROLES_WRITER]
+		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_WRITER
 	};
 
 	const removeRoleForSubjectRoute: IRestRoute<
@@ -457,7 +409,7 @@ export function generateRestRoutesAuthorization(
 		summary: "Remove a role for a subject",
 		tag: tagsAuthorization[0].name,
 		method: "DELETE",
-		path: `${baseRouteName}/subject/:subject/role/:role`,
+		path: `${baseRouteName}/:modelId/subject/:subject/role/:role`,
 		handler: async (httpRequestContext, request) =>
 			authorizationRemoveRoleForSubject(httpRequestContext, componentName, request),
 		requestType: {
@@ -466,7 +418,7 @@ export function generateRestRoutesAuthorization(
 				{
 					id: "authorizationRemoveRoleForSubjectExample",
 					request: {
-						pathParams: { subject: "user1", role: "admin" }
+						pathParams: { modelId: "default", subject: "user1", role: "admin" }
 					}
 				}
 			]
@@ -482,8 +434,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_WRITER],
-		defaultRoles: [DEFAULT_ROUTE_ROLES_WRITER]
+		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_WRITER
 	};
 
 	const removeAllRolesForSubjectRoute: IRestRoute<
@@ -494,7 +445,7 @@ export function generateRestRoutesAuthorization(
 		summary: "Remove all roles for a subject",
 		tag: tagsAuthorization[0].name,
 		method: "DELETE",
-		path: `${baseRouteName}/subject/:subject/roles`,
+		path: `${baseRouteName}/:modelId/subject/:subject/roles`,
 		handler: async (httpRequestContext, request) =>
 			authorizationRemoveAllRolesForSubject(httpRequestContext, componentName, request),
 		requestType: {
@@ -503,7 +454,7 @@ export function generateRestRoutesAuthorization(
 				{
 					id: "authorizationRemoveAllRolesForSubjectExample",
 					request: {
-						pathParams: { subject: "user1" }
+						pathParams: { modelId: "default", subject: "user1" }
 					}
 				}
 			]
@@ -519,8 +470,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_WRITER],
-		defaultRoles: [DEFAULT_ROUTE_ROLES_WRITER]
+		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_WRITER
 	};
 
 	const getRolesForSubjectRoute: IRestRoute<
@@ -531,7 +481,7 @@ export function generateRestRoutesAuthorization(
 		summary: "Get roles for a subject",
 		tag: tagsAuthorization[0].name,
 		method: "GET",
-		path: `${baseRouteName}/subject/:subject/roles`,
+		path: `${baseRouteName}/:modelId/subject/:subject/roles`,
 		handler: async (httpRequestContext, request) =>
 			authorizationGetRolesForSubject(httpRequestContext, componentName, request),
 		requestType: {
@@ -540,7 +490,7 @@ export function generateRestRoutesAuthorization(
 				{
 					id: "authorizationGetRolesForSubjectExample",
 					request: {
-						pathParams: { subject: "user1" }
+						pathParams: { modelId: "default", subject: "user1" }
 					}
 				}
 			]
@@ -558,8 +508,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
-		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
+		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_READER
 	};
 
 	const hasRoleForSubjectRoute: IRestRoute<
@@ -570,7 +519,7 @@ export function generateRestRoutesAuthorization(
 		summary: "Check if a subject has a role",
 		tag: tagsAuthorization[0].name,
 		method: "GET",
-		path: `${baseRouteName}/subject/:subject/role/:role`,
+		path: `${baseRouteName}/:modelId/subject/:subject/role/:role`,
 		handler: async (httpRequestContext, request) =>
 			authorizationHasRoleForSubject(httpRequestContext, componentName, request),
 		requestType: {
@@ -579,7 +528,7 @@ export function generateRestRoutesAuthorization(
 				{
 					id: "authorizationHasRoleForSubjectExample",
 					request: {
-						pathParams: { subject: "user1", role: "admin" }
+						pathParams: { modelId: "default", subject: "user1", role: "admin" }
 					}
 				}
 			]
@@ -597,8 +546,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
-		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
+		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_READER
 	};
 
 	const getSubjectsForRoleRoute: IRestRoute<
@@ -609,7 +557,7 @@ export function generateRestRoutesAuthorization(
 		summary: "Get subjects for a role",
 		tag: tagsAuthorization[0].name,
 		method: "GET",
-		path: `${baseRouteName}/role/:role/subjects`,
+		path: `${baseRouteName}/:modelId/role/:role/subjects`,
 		handler: async (httpRequestContext, request) =>
 			authorizationGetSubjectsForRole(httpRequestContext, componentName, request),
 		requestType: {
@@ -618,7 +566,7 @@ export function generateRestRoutesAuthorization(
 				{
 					id: "authorizationGetSubjectsForRoleExample",
 					request: {
-						pathParams: { role: "admin" }
+						pathParams: { modelId: "default", role: "admin" }
 					}
 				}
 			]
@@ -636,8 +584,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
-		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
+		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_READER
 	};
 
 	const addRoleInheritanceRoute: IRestRoute<
@@ -648,7 +595,7 @@ export function generateRestRoutesAuthorization(
 		summary: "Add a role inheritance",
 		tag: tagsAuthorization[0].name,
 		method: "POST",
-		path: `${baseRouteName}/role/:role/inherit`,
+		path: `${baseRouteName}/:modelId/role/:role/inherit`,
 		handler: async (httpRequestContext, request) =>
 			authorizationAddRoleInheritance(httpRequestContext, componentName, request),
 		requestType: {
@@ -657,7 +604,7 @@ export function generateRestRoutesAuthorization(
 				{
 					id: "authorizationAddRoleInheritanceExample",
 					request: {
-						pathParams: { role: "editor" },
+						pathParams: { modelId: "default", role: "editor" },
 						body: { inheritsFrom: "viewer" }
 					}
 				}
@@ -674,8 +621,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_WRITER],
-		defaultRoles: [DEFAULT_ROUTE_ROLES_WRITER]
+		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_WRITER
 	};
 
 	const removeRoleInheritanceRoute: IRestRoute<
@@ -686,7 +632,7 @@ export function generateRestRoutesAuthorization(
 		summary: "Remove a role inheritance",
 		tag: tagsAuthorization[0].name,
 		method: "DELETE",
-		path: `${baseRouteName}/role/:role/inherit/:inheritsFrom`,
+		path: `${baseRouteName}/:modelId/role/:role/inherit/:inheritsFrom`,
 		handler: async (httpRequestContext, request) =>
 			authorizationRemoveRoleInheritance(httpRequestContext, componentName, request),
 		requestType: {
@@ -695,7 +641,7 @@ export function generateRestRoutesAuthorization(
 				{
 					id: "authorizationRemoveRoleInheritanceExample",
 					request: {
-						pathParams: { role: "editor", inheritsFrom: "viewer" }
+						pathParams: { modelId: "default", role: "editor", inheritsFrom: "viewer" }
 					}
 				}
 			]
@@ -711,8 +657,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_WRITER],
-		defaultRoles: [DEFAULT_ROUTE_ROLES_WRITER]
+		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_WRITER
 	};
 
 	const getParentRolesRoute: IRestRoute<
@@ -723,7 +668,7 @@ export function generateRestRoutesAuthorization(
 		summary: "Get parent roles for a role",
 		tag: tagsAuthorization[0].name,
 		method: "GET",
-		path: `${baseRouteName}/role/:role/parents`,
+		path: `${baseRouteName}/:modelId/role/:role/parents`,
 		handler: async (httpRequestContext, request) =>
 			authorizationGetParentRoles(httpRequestContext, componentName, request),
 		requestType: {
@@ -732,7 +677,7 @@ export function generateRestRoutesAuthorization(
 				{
 					id: "authorizationGetParentRolesExample",
 					request: {
-						pathParams: { role: "editor" }
+						pathParams: { modelId: "default", role: "editor" }
 					}
 				}
 			]
@@ -750,8 +695,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
-		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
+		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_READER
 	};
 
 	const getChildRolesRoute: IRestRoute<
@@ -762,7 +706,7 @@ export function generateRestRoutesAuthorization(
 		summary: "Get child roles for a role",
 		tag: tagsAuthorization[0].name,
 		method: "GET",
-		path: `${baseRouteName}/role/:role/children`,
+		path: `${baseRouteName}/:modelId/role/:role/children`,
 		handler: async (httpRequestContext, request) =>
 			authorizationGetChildRoles(httpRequestContext, componentName, request),
 		requestType: {
@@ -771,7 +715,7 @@ export function generateRestRoutesAuthorization(
 				{
 					id: "authorizationGetChildRolesExample",
 					request: {
-						pathParams: { role: "admin" }
+						pathParams: { modelId: "default", role: "admin" }
 					}
 				}
 			]
@@ -789,13 +733,11 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermissions: [DEFAULT_ROUTE_PERMISSIONS_READER],
-		defaultRoles: [DEFAULT_ROUTE_ROLES_READER]
+		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_READER
 	};
 
 	return [
 		checkRoute,
-		checkAnyRoute,
 		addPolicyRoute,
 		removePolicyRoute,
 		getAllPoliciesRoute,
@@ -828,6 +770,12 @@ export async function authorizationCheck(
 	request: IAuthorizationCheckRequest
 ): Promise<IAuthorizationCheckResponse> {
 	Guards.object<IAuthorizationCheckRequest>(ROUTES_SOURCE, nameof(request), request);
+	Guards.object<IAuthorizationCheckRequest["pathParams"]>(
+		ROUTES_SOURCE,
+		nameof(request.pathParams),
+		request.pathParams
+	);
+	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.modelId), request.pathParams.modelId);
 	Guards.object<IAuthorizationCheckRequest["body"]>(
 		ROUTES_SOURCE,
 		nameof(request.body),
@@ -839,39 +787,8 @@ export async function authorizationCheck(
 
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
 	const allowed = await component.check(
+		request.pathParams.modelId,
 		request.body.subject,
-		request.body.object,
-		request.body.action
-	);
-
-	return { body: { allowed } };
-}
-
-/**
- * Perform the check any authorization operation.
- * @param httpRequestContext The request context for the API.
- * @param componentName The name of the component to use in the routes.
- * @param request The request.
- * @returns The response object with additional http response properties.
- */
-export async function authorizationCheckAny(
-	httpRequestContext: IHttpRequestContext,
-	componentName: string,
-	request: IAuthorizationCheckAnyRequest
-): Promise<IAuthorizationCheckAnyResponse> {
-	Guards.object<IAuthorizationCheckAnyRequest>(ROUTES_SOURCE, nameof(request), request);
-	Guards.object<IAuthorizationCheckAnyRequest["body"]>(
-		ROUTES_SOURCE,
-		nameof(request.body),
-		request.body
-	);
-	Guards.array<string>(ROUTES_SOURCE, nameof(request.body.subjects), request.body.subjects);
-	Guards.stringValue(ROUTES_SOURCE, nameof(request.body.object), request.body.object);
-	Guards.stringValue(ROUTES_SOURCE, nameof(request.body.action), request.body.action);
-
-	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
-	const allowed = await component.checkAny(
-		request.body.subjects,
 		request.body.object,
 		request.body.action
 	);
@@ -892,6 +809,12 @@ export async function authorizationAddPolicy(
 	request: IAuthorizationAddPolicyRequest
 ): Promise<INoContentResponse> {
 	Guards.object<IAuthorizationAddPolicyRequest>(ROUTES_SOURCE, nameof(request), request);
+	Guards.object<IAuthorizationAddPolicyRequest["pathParams"]>(
+		ROUTES_SOURCE,
+		nameof(request.pathParams),
+		request.pathParams
+	);
+	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.modelId), request.pathParams.modelId);
 	Guards.object<IAuthorizationAddPolicyRequest["body"]>(
 		ROUTES_SOURCE,
 		nameof(request.body),
@@ -902,7 +825,12 @@ export async function authorizationAddPolicy(
 	Guards.stringValue(ROUTES_SOURCE, nameof(request.body.action), request.body.action);
 
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
-	await component.addPolicy(request.body);
+	await component.addPolicy(
+		request.pathParams.modelId,
+		request.body.subject,
+		request.body.object,
+		request.body.action
+	);
 
 	return { statusCode: HttpStatusCode.noContent };
 }
@@ -920,6 +848,12 @@ export async function authorizationRemovePolicy(
 	request: IAuthorizationRemovePolicyRequest
 ): Promise<INoContentResponse> {
 	Guards.object<IAuthorizationRemovePolicyRequest>(ROUTES_SOURCE, nameof(request), request);
+	Guards.object<IAuthorizationRemovePolicyRequest["pathParams"]>(
+		ROUTES_SOURCE,
+		nameof(request.pathParams),
+		request.pathParams
+	);
+	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.modelId), request.pathParams.modelId);
 	Guards.object<IAuthorizationRemovePolicyRequest["body"]>(
 		ROUTES_SOURCE,
 		nameof(request.body),
@@ -930,7 +864,12 @@ export async function authorizationRemovePolicy(
 	Guards.stringValue(ROUTES_SOURCE, nameof(request.body.action), request.body.action);
 
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
-	await component.removePolicy(request.body);
+	await component.removePolicy(
+		request.pathParams.modelId,
+		request.body.subject,
+		request.body.object,
+		request.body.action
+	);
 
 	return { statusCode: HttpStatusCode.noContent };
 }
@@ -947,9 +886,18 @@ export async function authorizationGetAllPolicies(
 	componentName: string,
 	request: IAuthorizationGetAllPoliciesRequest
 ): Promise<IAuthorizationGetAllPoliciesResponse> {
+	Guards.object<IAuthorizationGetAllPoliciesRequest>(ROUTES_SOURCE, nameof(request), request);
+	Guards.object<IAuthorizationGetAllPoliciesRequest["pathParams"]>(
+		ROUTES_SOURCE,
+		nameof(request.pathParams),
+		request.pathParams
+	);
+	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.modelId), request.pathParams.modelId);
+
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
 	const limit = request.query?.limit !== undefined ? parseInt(request.query.limit, 10) : undefined;
 	const result = await component.getAllPolicies(
+		request.pathParams.modelId,
 		request.query?.subject,
 		request.query?.cursor,
 		limit
@@ -970,9 +918,21 @@ export async function authorizationGetAllRoles(
 	componentName: string,
 	request: IAuthorizationGetAllRolesRequest
 ): Promise<IAuthorizationGetAllRolesResponse> {
+	Guards.object<IAuthorizationGetAllRolesRequest>(ROUTES_SOURCE, nameof(request), request);
+	Guards.object<IAuthorizationGetAllRolesRequest["pathParams"]>(
+		ROUTES_SOURCE,
+		nameof(request.pathParams),
+		request.pathParams
+	);
+	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.modelId), request.pathParams.modelId);
+
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
 	const limit = request.query?.limit !== undefined ? parseInt(request.query.limit, 10) : undefined;
-	const result = await component.getAllRoles(request.query?.cursor, limit);
+	const result = await component.getAllRoles(
+		request.pathParams.modelId,
+		request.query?.cursor,
+		limit
+	);
 
 	return { body: result };
 }
@@ -990,6 +950,12 @@ export async function authorizationHasRoles(
 	request: IAuthorizationHasRolesRequest
 ): Promise<IAuthorizationHasRolesResponse> {
 	Guards.object<IAuthorizationHasRolesRequest>(ROUTES_SOURCE, nameof(request), request);
+	Guards.object<IAuthorizationHasRolesRequest["pathParams"]>(
+		ROUTES_SOURCE,
+		nameof(request.pathParams),
+		request.pathParams
+	);
+	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.modelId), request.pathParams.modelId);
 	Guards.object<IAuthorizationHasRolesRequest["body"]>(
 		ROUTES_SOURCE,
 		nameof(request.body),
@@ -998,7 +964,7 @@ export async function authorizationHasRoles(
 	Guards.array<string>(ROUTES_SOURCE, nameof(request.body.roles), request.body.roles);
 
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
-	const exists = await component.hasRoles(request.body.roles);
+	const exists = await component.hasRoles(request.pathParams.modelId, request.body.roles);
 
 	return { body: { exists } };
 }
@@ -1025,12 +991,18 @@ export async function authorizationGetPoliciesForSubject(
 		nameof(request.pathParams),
 		request.pathParams
 	);
+	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.modelId), request.pathParams.modelId);
 	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.subject), request.pathParams.subject);
 
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
-	const policies = await component.getPoliciesForSubject(request.pathParams.subject);
+	const result = await component.getPoliciesForSubject(
+		request.pathParams.modelId,
+		request.pathParams.subject,
+		request.query?.cursor,
+		Coerce.integer(request.query?.limit)
+	);
 
-	return { body: { policies } };
+	return { body: result };
 }
 
 /**
@@ -1051,6 +1023,7 @@ export async function authorizationAddRoleForSubject(
 		nameof(request.pathParams),
 		request.pathParams
 	);
+	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.modelId), request.pathParams.modelId);
 	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.subject), request.pathParams.subject);
 	Guards.object<IAuthorizationAddRoleForSubjectRequest["body"]>(
 		ROUTES_SOURCE,
@@ -1060,7 +1033,11 @@ export async function authorizationAddRoleForSubject(
 	Guards.stringValue(ROUTES_SOURCE, nameof(request.body.role), request.body.role);
 
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
-	await component.addRoleForSubject(request.pathParams.subject, request.body.role);
+	await component.addRoleForSubject(
+		request.pathParams.modelId,
+		request.pathParams.subject,
+		request.body.role
+	);
 
 	return { statusCode: HttpStatusCode.noContent };
 }
@@ -1083,11 +1060,16 @@ export async function authorizationRemoveRoleForSubject(
 		nameof(request.pathParams),
 		request.pathParams
 	);
+	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.modelId), request.pathParams.modelId);
 	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.subject), request.pathParams.subject);
 	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.role), request.pathParams.role);
 
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
-	await component.removeRoleForSubject(request.pathParams.subject, request.pathParams.role);
+	await component.removeRoleForSubject(
+		request.pathParams.modelId,
+		request.pathParams.subject,
+		request.pathParams.role
+	);
 
 	return { statusCode: HttpStatusCode.noContent };
 }
@@ -1114,10 +1096,11 @@ export async function authorizationRemoveAllRolesForSubject(
 		nameof(request.pathParams),
 		request.pathParams
 	);
+	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.modelId), request.pathParams.modelId);
 	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.subject), request.pathParams.subject);
 
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
-	await component.removeAllRolesForSubject(request.pathParams.subject);
+	await component.removeAllRolesForSubject(request.pathParams.modelId, request.pathParams.subject);
 
 	return { statusCode: HttpStatusCode.noContent };
 }
@@ -1140,10 +1123,14 @@ export async function authorizationGetRolesForSubject(
 		nameof(request.pathParams),
 		request.pathParams
 	);
+	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.modelId), request.pathParams.modelId);
 	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.subject), request.pathParams.subject);
 
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
-	const roles = await component.getRolesForSubject(request.pathParams.subject);
+	const roles = await component.getRolesForSubject(
+		request.pathParams.modelId,
+		request.pathParams.subject
+	);
 
 	return { body: { roles } };
 }
@@ -1166,11 +1153,13 @@ export async function authorizationHasRoleForSubject(
 		nameof(request.pathParams),
 		request.pathParams
 	);
+	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.modelId), request.pathParams.modelId);
 	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.subject), request.pathParams.subject);
 	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.role), request.pathParams.role);
 
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
 	const hasRole = await component.hasRoleForSubject(
+		request.pathParams.modelId,
 		request.pathParams.subject,
 		request.pathParams.role
 	);
@@ -1196,10 +1185,14 @@ export async function authorizationGetSubjectsForRole(
 		nameof(request.pathParams),
 		request.pathParams
 	);
+	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.modelId), request.pathParams.modelId);
 	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.role), request.pathParams.role);
 
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
-	const subjects = await component.getSubjectsForRole(request.pathParams.role);
+	const subjects = await component.getSubjectsForRole(
+		request.pathParams.modelId,
+		request.pathParams.role
+	);
 
 	return { body: { subjects } };
 }
@@ -1222,6 +1215,7 @@ export async function authorizationAddRoleInheritance(
 		nameof(request.pathParams),
 		request.pathParams
 	);
+	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.modelId), request.pathParams.modelId);
 	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.role), request.pathParams.role);
 	Guards.object<IAuthorizationAddRoleInheritanceRequest["body"]>(
 		ROUTES_SOURCE,
@@ -1231,7 +1225,11 @@ export async function authorizationAddRoleInheritance(
 	Guards.stringValue(ROUTES_SOURCE, nameof(request.body.inheritsFrom), request.body.inheritsFrom);
 
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
-	await component.addRoleInheritance(request.pathParams.role, request.body.inheritsFrom);
+	await component.addRoleInheritance(
+		request.pathParams.modelId,
+		request.pathParams.role,
+		request.body.inheritsFrom
+	);
 
 	return { statusCode: HttpStatusCode.noContent };
 }
@@ -1258,6 +1256,7 @@ export async function authorizationRemoveRoleInheritance(
 		nameof(request.pathParams),
 		request.pathParams
 	);
+	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.modelId), request.pathParams.modelId);
 	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.role), request.pathParams.role);
 	Guards.stringValue(
 		ROUTES_SOURCE,
@@ -1266,7 +1265,11 @@ export async function authorizationRemoveRoleInheritance(
 	);
 
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
-	await component.removeRoleInheritance(request.pathParams.role, request.pathParams.inheritsFrom);
+	await component.removeRoleInheritance(
+		request.pathParams.modelId,
+		request.pathParams.role,
+		request.pathParams.inheritsFrom
+	);
 
 	return { statusCode: HttpStatusCode.noContent };
 }
@@ -1289,10 +1292,11 @@ export async function authorizationGetParentRoles(
 		nameof(request.pathParams),
 		request.pathParams
 	);
+	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.modelId), request.pathParams.modelId);
 	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.role), request.pathParams.role);
 
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
-	const roles = await component.getParentRoles(request.pathParams.role);
+	const roles = await component.getParentRoles(request.pathParams.modelId, request.pathParams.role);
 
 	return { body: { roles } };
 }
@@ -1315,10 +1319,11 @@ export async function authorizationGetChildRoles(
 		nameof(request.pathParams),
 		request.pathParams
 	);
+	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.modelId), request.pathParams.modelId);
 	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.role), request.pathParams.role);
 
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
-	const roles = await component.getChildRoles(request.pathParams.role);
+	const roles = await component.getChildRoles(request.pathParams.modelId, request.pathParams.role);
 
 	return { body: { roles } };
 }

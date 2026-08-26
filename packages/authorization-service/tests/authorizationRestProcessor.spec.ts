@@ -20,18 +20,19 @@ import { EntityStorageConnectorFactory } from "@twin.org/entity-storage-models";
 import { nameof } from "@twin.org/nameof";
 import { HttpStatusCode } from "@twin.org/web";
 import { AuthorizationService } from "../src/authorizationService.js";
-import { AuthorizationProcessor } from "../src/processors/authorizationProcessor.js";
+import { AuthorizationRestProcessor } from "../src/processors/authorizationRestProcessor.js";
 
 const TEST_NAMESPACE = "test-es";
 const COMPONENT_TYPE = "authorization";
+const TEST_MODEL_ID = "rest";
 
-describe("AuthorizationProcessor (entity-storage backed)", () => {
+describe("AuthorizationRestProcessor (entity-storage backed)", () => {
 	let policyStorage: MemoryEntityStorageConnector<AuthorizationPolicy>;
 	let roleStorage: MemoryEntityStorageConnector<AuthorizationRoleAssignment>;
 	let inheritanceStorage: MemoryEntityStorageConnector<AuthorizationRoleInheritance>;
 	let roleNameStorage: MemoryEntityStorageConnector<AuthorizationRoleName>;
 	let service: AuthorizationService;
-	let processor: AuthorizationProcessor;
+	let processor: AuthorizationRestProcessor;
 
 	beforeEach(async () => {
 		initSchema();
@@ -75,7 +76,7 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 		service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 		ComponentFactory.register(COMPONENT_TYPE, () => service);
 
-		processor = new AuthorizationProcessor();
+		processor = new AuthorizationRestProcessor({ config: { authorizationModelId: TEST_MODEL_ID } });
 	});
 
 	afterEach(async () => {
@@ -109,10 +110,10 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 
 	async function initialize(rules: IAuthorizationRules): Promise<void> {
 		for (const policy of rules.policies ?? []) {
-			await service.addPolicy(policy);
+			await service.addPolicy(TEST_MODEL_ID, policy.subject, policy.object, policy.action);
 		}
 		for (const inheritance of rules.roleInheritances ?? []) {
-			await service.addRoleInheritance(inheritance.role, inheritance.inheritsFrom);
+			await service.addRoleInheritance(TEST_MODEL_ID, inheritance.role, inheritance.inheritsFrom);
 		}
 	}
 
@@ -157,7 +158,7 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 			await initialize({
 				policies: [{ subject: "editor", object: "reportRead", action: "execute" }]
 			});
-			await service.addRoleForSubject("user-alice", "editor");
+			await service.addRoleForSubject(TEST_MODEL_ID, "user-alice", "editor");
 
 			const response = makeResponse();
 			await processor.pre(
@@ -175,7 +176,7 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 			await initialize({
 				policies: [{ subject: "admin", object: "reportDelete", action: "execute" }]
 			});
-			await service.addRoleForSubject("user-alice", "editor");
+			await service.addRoleForSubject(TEST_MODEL_ID, "user-alice", "editor");
 
 			const response = makeResponse();
 			await processor.pre(
@@ -193,8 +194,8 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 			await initialize({
 				policies: [{ subject: "admin", object: "settingsWrite", action: "execute" }]
 			});
-			await service.addRoleForSubject("user-bob", "viewer");
-			await service.addRoleForSubject("user-bob", "admin");
+			await service.addRoleForSubject(TEST_MODEL_ID, "user-bob", "viewer");
+			await service.addRoleForSubject(TEST_MODEL_ID, "user-bob", "admin");
 
 			const response = makeResponse();
 			await processor.pre(
@@ -212,8 +213,8 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 			await initialize({
 				policies: [{ subject: "admin", object: "settingsWrite", action: "execute" }]
 			});
-			await service.addRoleForSubject("user-bob", "viewer");
-			await service.addRoleForSubject("user-bob", "editor");
+			await service.addRoleForSubject(TEST_MODEL_ID, "user-bob", "viewer");
+			await service.addRoleForSubject(TEST_MODEL_ID, "user-bob", "editor");
 
 			const response = makeResponse();
 			await processor.pre(
@@ -234,8 +235,8 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 					{ subject: "editor", object: "reportWrite", action: "execute" }
 				]
 			});
-			await service.addRoleForSubject("user-carol", "viewer");
-			await service.addRoleForSubject("user-carol", "editor");
+			await service.addRoleForSubject(TEST_MODEL_ID, "user-carol", "viewer");
+			await service.addRoleForSubject(TEST_MODEL_ID, "user-carol", "editor");
 
 			const readResponse = makeResponse();
 			await processor.pre(
@@ -266,7 +267,7 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 				policies: [{ subject: "superAdmin", object: "tenantDelete", action: "execute" }],
 				roleInheritances: [{ role: "admin", inheritsFrom: "superAdmin" }]
 			});
-			await service.addRoleForSubject("user-alice", "admin");
+			await service.addRoleForSubject(TEST_MODEL_ID, "user-alice", "admin");
 
 			const response = makeResponse();
 			await processor.pre(
@@ -289,7 +290,7 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 					{ role: "manager", inheritsFrom: "root" }
 				]
 			});
-			await service.addRoleForSubject("user-dave", "operator");
+			await service.addRoleForSubject(TEST_MODEL_ID, "user-dave", "operator");
 
 			const response = makeResponse();
 			await processor.pre(
@@ -307,7 +308,7 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 			await initialize({
 				policies: [{ subject: "superAdmin", object: "tenantDelete", action: "execute" }]
 			});
-			await service.addRoleForSubject("user-alice", "editor");
+			await service.addRoleForSubject(TEST_MODEL_ID, "user-alice", "editor");
 
 			const response = makeResponse();
 			await processor.pre(
@@ -327,8 +328,8 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 				policies: [{ subject: "superAdmin", object: "auditPurge", action: "execute" }],
 				roleInheritances: [{ role: "admin", inheritsFrom: "superAdmin" }]
 			});
-			await service.addRoleForSubject("user-eve", "viewer");
-			await service.addRoleForSubject("user-eve", "admin");
+			await service.addRoleForSubject(TEST_MODEL_ID, "user-eve", "viewer");
+			await service.addRoleForSubject(TEST_MODEL_ID, "user-eve", "admin");
 
 			const response = makeResponse();
 			await processor.pre(
@@ -386,54 +387,6 @@ describe("AuthorizationProcessor (entity-storage backed)", () => {
 			await processor.pre(makeRequest(), response, makeRoute("secureAction"), makeContextIds(), {});
 
 			expect(response.statusCode).toBe(HttpStatusCode.unauthorized);
-		});
-	});
-
-	describe("defaultRole fallback", () => {
-		test("uses the configured defaultRole when contextIds carries no userId", async () => {
-			await initialize({
-				policies: [{ subject: "guest", object: "homeView", action: "execute" }]
-			});
-
-			processor = new AuthorizationProcessor({ config: { defaultRole: "guest" } });
-
-			const response = makeResponse();
-			await processor.pre(makeRequest(), response, makeRoute("homeView"), makeContextIds(), {});
-
-			expect(response.statusCode).toBe(HttpStatusCode.ok);
-		});
-
-		test("denies when contextIds carries no userId and the defaultRole has no matching policy", async () => {
-			await initialize({
-				policies: [{ subject: "admin", object: "adminPanel", action: "execute" }]
-			});
-
-			processor = new AuthorizationProcessor({ config: { defaultRole: "guest" } });
-
-			const response = makeResponse();
-			await processor.pre(makeRequest(), response, makeRoute("adminPanel"), makeContextIds(), {});
-
-			expect(response.statusCode).toBe(HttpStatusCode.unauthorized);
-		});
-
-		test("prefers the userId over the defaultRole when userId is present", async () => {
-			await initialize({
-				policies: [{ subject: "editor", object: "docWrite", action: "execute" }]
-			});
-			await service.addRoleForSubject("user-alice", "editor");
-
-			processor = new AuthorizationProcessor({ config: { defaultRole: "guest" } });
-
-			const response = makeResponse();
-			await processor.pre(
-				makeRequest(),
-				response,
-				makeRoute("docWrite"),
-				makeContextIds("user-alice"),
-				{}
-			);
-
-			expect(response.statusCode).toBe(HttpStatusCode.ok);
 		});
 	});
 });

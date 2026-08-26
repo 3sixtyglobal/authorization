@@ -10,6 +10,11 @@ export interface IAuthorizationHasRoleForSubjectRequest {
 	 */
 	pathParams: {
 		/**
+		 * The model identifier selecting which policy set to use.
+		 */
+		modelId: string;
+
+		/**
 		 * The subject to check.
 		 */
 		subject: string;

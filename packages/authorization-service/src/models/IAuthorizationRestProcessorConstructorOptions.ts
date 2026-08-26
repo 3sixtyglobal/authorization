@@ -1,13 +1,13 @@
 // Copyright 2026 IOTA Stiftung.
 // SPDX-License-Identifier: Apache-2.0.
-import type { IAuthorizationProcessorConfig } from "./IAuthorizationProcessorConfig.js";
+import type { IAuthorizationRestProcessorConfig } from "./IAuthorizationRestProcessorConfig.js";
 
 /**
  * Options for the AuthorizationProcessor constructor.
  */
-export interface IAuthorizationProcessorConstructorOptions {
+export interface IAuthorizationRestProcessorConstructorOptions {
 	/**
-	 * The component to use for authorization of the root.
+	 * The component to use for authorization of the route.
 	 * @default authorization
 	 */
 	authorizationComponentType?: string;
@@ -15,5 +15,5 @@ export interface IAuthorizationProcessorConstructorOptions {
 	/**
 	 * The configuration for the processor.
 	 */
-	config?: IAuthorizationProcessorConfig;
+	config?: IAuthorizationRestProcessorConfig;
 }

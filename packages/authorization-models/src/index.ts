@@ -5,8 +5,6 @@ export * from "./helpers/rulesHelper.js";
 export * from "./models/api/IAuthorizationAddPolicyRequest.js";
 export * from "./models/api/IAuthorizationAddRoleForSubjectRequest.js";
 export * from "./models/api/IAuthorizationAddRoleInheritanceRequest.js";
-export * from "./models/api/IAuthorizationCheckAnyRequest.js";
-export * from "./models/api/IAuthorizationCheckAnyResponse.js";
 export * from "./models/api/IAuthorizationCheckRequest.js";
 export * from "./models/api/IAuthorizationCheckResponse.js";
 export * from "./models/api/IAuthorizationGetAllPoliciesRequest.js";

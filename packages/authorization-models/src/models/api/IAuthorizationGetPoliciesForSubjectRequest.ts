@@ -10,8 +10,28 @@ export interface IAuthorizationGetPoliciesForSubjectRequest {
 	 */
 	pathParams: {
 		/**
+		 * The model identifier selecting which policy set to use.
+		 */
+		modelId: string;
+
+		/**
 		 * The subject to get policies for.
 		 */
 		subject: string;
+	};
+
+	/**
+	 * The request query parameters.
+	 */
+	query?: {
+		/**
+		 * The cursor to request the next chunk of results.
+		 */
+		cursor?: string;
+
+		/**
+		 * Limit the number of entities to return.
+		 */
+		limit?: string;
 	};
 }

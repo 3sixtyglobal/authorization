@@ -12,16 +12,16 @@ import { ContextIdKeys, type IContextIds } from "@twin.org/context";
 import { BaseError, ComponentFactory, GeneralError, Is, UnauthorizedError } from "@twin.org/core";
 import { nameof } from "@twin.org/nameof";
 import { HttpStatusCode } from "@twin.org/web";
-import type { IAuthorizationProcessorConstructorOptions } from "../models/IAuthorizationProcessorConstructorOptions.js";
+import type { IAuthorizationRestProcessorConstructorOptions } from "../models/IAuthorizationRestProcessorConstructorOptions.js";
 
 /**
  * Use the identity from the context ids to check their authorization for a route.
  */
-export class AuthorizationProcessor implements IBaseRouteProcessor {
+export class AuthorizationRestProcessor implements IBaseRouteProcessor {
 	/**
 	 * Runtime name for the class.
 	 */
-	public static readonly CLASS_NAME: string = nameof<AuthorizationProcessor>();
+	public static readonly CLASS_NAME: string = nameof<AuthorizationRestProcessor>();
 
 	/**
 	 * The authorization component.
@@ -30,27 +30,27 @@ export class AuthorizationProcessor implements IBaseRouteProcessor {
 	private readonly _authorizationComponent: IAuthorizationComponent;
 
 	/**
+	 * The model identifier used when checking route authorization.
+	 * @internal
+	 */
+	private readonly _authorizationModelId: string;
+
+	/**
 	 * Include the stack with errors.
 	 * @internal
 	 */
 	private readonly _includeErrorStack: boolean;
 
 	/**
-	 * The role to use when no roles are present in the context IDs.
-	 * @internal
-	 */
-	private readonly _defaultRole: string | undefined;
-
-	/**
 	 * Create a new instance of AuthorizationProcessor.
 	 * @param options Options for the processor.
 	 */
-	constructor(options?: IAuthorizationProcessorConstructorOptions) {
+	constructor(options?: IAuthorizationRestProcessorConstructorOptions) {
 		this._authorizationComponent = ComponentFactory.get(
 			options?.authorizationComponentType ?? "authorization"
 		);
+		this._authorizationModelId = options?.config?.authorizationModelId ?? "rest";
 		this._includeErrorStack = options?.config?.includeErrorStack ?? false;
-		this._defaultRole = options?.config?.defaultRole;
 	}
 
 	/**
@@ -58,7 +58,7 @@ export class AuthorizationProcessor implements IBaseRouteProcessor {
 	 * @returns The class name of the component.
 	 */
 	public className(): string {
-		return AuthorizationProcessor.CLASS_NAME;
+		return AuthorizationRestProcessor.CLASS_NAME;
 	}
 
 	/**
@@ -81,29 +81,25 @@ export class AuthorizationProcessor implements IBaseRouteProcessor {
 			try {
 				const routeId = route.operationId;
 				if (!Is.stringValue(routeId)) {
-					throw new GeneralError(AuthorizationProcessor.CLASS_NAME, "routeIdMissing");
+					throw new GeneralError(AuthorizationRestProcessor.CLASS_NAME, "routeIdMissing");
 				}
 
 				const userId = contextIds[ContextIdKeys.User];
-				let subjects: string[];
-				if (Is.stringValue(userId)) {
-					subjects = [userId];
-				} else if (Is.stringValue(this._defaultRole)) {
-					subjects = [this._defaultRole];
-				} else {
-					subjects = [];
-				}
 				if (
-					subjects.length === 0 ||
-					!(await this._authorizationComponent.checkAny(subjects, routeId, "execute"))
+					!Is.stringValue(userId) ||
+					!(await this._authorizationComponent.check(
+						this._authorizationModelId,
+						userId,
+						routeId,
+						"execute"
+					))
 				) {
-					throw new UnauthorizedError(AuthorizationProcessor.CLASS_NAME, "accessDenied");
+					throw new UnauthorizedError(AuthorizationRestProcessor.CLASS_NAME, "accessDenied");
 				}
 			} catch (err) {
-				const error = BaseError.fromError(err);
 				HttpErrorHelper.buildResponse(
 					response,
-					error,
+					BaseError.fromError(err),
 					HttpStatusCode.unauthorized,
 					this._includeErrorStack
 				);

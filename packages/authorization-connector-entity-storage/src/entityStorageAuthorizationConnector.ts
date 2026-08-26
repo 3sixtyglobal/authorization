@@ -1,8 +1,8 @@
 // Copyright 2026 IOTA Stiftung.
 // SPDX-License-Identifier: Apache-2.0.
 import type { IAuthorizationConnector, IAuthorizationPolicy } from "@twin.org/authorization-models";
-import { BaseError, GeneralError, Guards } from "@twin.org/core";
-import { ComparisonOperator, SortDirection } from "@twin.org/entity";
+import { BaseError, GeneralError, Guards, Is } from "@twin.org/core";
+import { ComparisonOperator, LogicalOperator, SortDirection } from "@twin.org/entity";
 import {
 	EntityStorageConnectorFactory,
 	type IEntityStorageConnector
@@ -81,27 +81,40 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 
 	/**
 	 * Check whether a subject is permitted to perform an action on a object.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject requesting access.
 	 * @param object The object being accessed.
 	 * @param action The action to check.
 	 * @returns True if access is granted, false otherwise.
 	 * @throws GeneralError if the check request fails.
 	 */
-	public async check(subject: string, object: string, action: string): Promise<boolean> {
+	public async check(
+		modelId: string,
+		subject: string,
+		object: string,
+		action: string
+	): Promise<boolean> {
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(object), object);
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(action), action);
 
 		try {
 			const directPolicy = await this._authorizationPolicyEntityStorage.get(
-				this.policyId(subject, object, action)
+				this.policyId(modelId, subject, object, action)
 			);
 			if (directPolicy) {
 				return true;
 			}
 
 			const roleResult = await this._authorizationRoleAssignmentEntityStorage.query(
-				{ property: "subject", value: subject, comparison: ComparisonOperator.Equals },
+				{
+					logicalOperator: LogicalOperator.And,
+					conditions: [
+						{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
+						{ property: "subject", value: subject, comparison: ComparisonOperator.Equals }
+					]
+				},
 				undefined,
 				["role"]
 			);
@@ -117,14 +130,20 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 					visited.add(nextRole);
 
 					const rolePolicy = await this._authorizationPolicyEntityStorage.get(
-						this.policyId(nextRole, object, action)
+						this.policyId(modelId, nextRole, object, action)
 					);
 					if (rolePolicy) {
 						return true;
 					}
 
 					const parentResult = await this._authorizationRoleInheritanceEntityStorage.query(
-						{ property: "role", value: nextRole, comparison: ComparisonOperator.Equals },
+						{
+							logicalOperator: LogicalOperator.And,
+							conditions: [
+								{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
+								{ property: "role", value: nextRole, comparison: ComparisonOperator.Equals }
+							]
+						},
 						undefined,
 						["inheritsFrom"]
 					);
@@ -151,78 +170,32 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	}
 
 	/**
-	 * Check whether any of the given subjects are permitted to perform an action on a resource.
-	 * @param subjects The subjects to check.
-	 * @param object The object being accessed.
-	 * @param action The action to check.
-	 * @returns True if access is granted for at least one subject, false otherwise.
-	 * @throws GeneralError if the check request fails.
+	 * Add a policy rule.
+	 * @param modelId The model identifier selecting which policy set to use.
+	 * @param subject The subject the policy applies to.
+	 * @param object The object the policy applies to.
+	 * @param action The action the policy applies to.
+	 * @returns Nothing.
+	 * @throws GeneralError if the add request fails.
 	 */
-	public async checkAny(
-		subjects: string[],
+	public async addPolicy(
+		modelId: string,
+		subject: string,
 		object: string,
 		action: string
-	): Promise<(boolean | undefined)[]> {
-		Guards.array<string>(
-			EntityStorageAuthorizationConnector.CLASS_NAME,
-			nameof(subjects),
-			subjects
-		);
+	): Promise<void> {
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(object), object);
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(action), action);
 
 		try {
-			if (subjects.length === 0) {
-				return [];
-			}
-			return await Promise.all(subjects.map(async subject => this.check(subject, object, action)));
-		} catch (err) {
-			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
-				throw err;
-			}
-			throw new GeneralError(
-				EntityStorageAuthorizationConnector.CLASS_NAME,
-				"checkAnyFailed",
-				{ object, action },
-				err
-			);
-		}
-	}
-
-	/**
-	 * Add a policy rule.
-	 * @param policy The policy to add.
-	 * @returns Nothing.
-	 * @throws GeneralError if the add request fails.
-	 */
-	public async addPolicy(policy: IAuthorizationPolicy): Promise<void> {
-		Guards.object<IAuthorizationPolicy>(
-			EntityStorageAuthorizationConnector.CLASS_NAME,
-			nameof(policy),
-			policy
-		);
-		Guards.stringValue(
-			EntityStorageAuthorizationConnector.CLASS_NAME,
-			nameof(policy.subject),
-			policy.subject
-		);
-		Guards.stringValue(
-			EntityStorageAuthorizationConnector.CLASS_NAME,
-			nameof(policy.object),
-			policy.object
-		);
-		Guards.stringValue(
-			EntityStorageAuthorizationConnector.CLASS_NAME,
-			nameof(policy.action),
-			policy.action
-		);
-
-		try {
 			const entity = new AuthorizationPolicy();
-			entity.id = this.policyId(policy.subject, policy.object, policy.action);
-			entity.subject = policy.subject;
-			entity.object = policy.object;
-			entity.action = policy.action;
+			entity.id = this.policyId(modelId, subject, object, action);
+			entity.modelId = modelId;
+			entity.subject = subject;
+			entity.object = object;
+			entity.action = action;
 			await this._authorizationPolicyEntityStorage.set(entity);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
@@ -231,7 +204,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 			throw new GeneralError(
 				EntityStorageAuthorizationConnector.CLASS_NAME,
 				"addPolicyFailed",
-				{ subject: policy.subject },
+				{ subject },
 				err
 			);
 		}
@@ -239,35 +212,27 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 
 	/**
 	 * Remove a policy rule.
-	 * @param policy The policy to remove.
+	 * @param modelId The model identifier selecting which policy set to use.
+	 * @param subject The subject of the policy to remove.
+	 * @param object The object of the policy to remove.
+	 * @param action The action of the policy to remove.
 	 * @returns Nothing.
 	 * @throws GeneralError if the remove request fails.
 	 */
-	public async removePolicy(policy: IAuthorizationPolicy): Promise<void> {
-		Guards.object<IAuthorizationPolicy>(
-			EntityStorageAuthorizationConnector.CLASS_NAME,
-			nameof(policy),
-			policy
-		);
-		Guards.stringValue(
-			EntityStorageAuthorizationConnector.CLASS_NAME,
-			nameof(policy.subject),
-			policy.subject
-		);
-		Guards.stringValue(
-			EntityStorageAuthorizationConnector.CLASS_NAME,
-			nameof(policy.object),
-			policy.object
-		);
-		Guards.stringValue(
-			EntityStorageAuthorizationConnector.CLASS_NAME,
-			nameof(policy.action),
-			policy.action
-		);
+	public async removePolicy(
+		modelId: string,
+		subject: string,
+		object: string,
+		action: string
+	): Promise<void> {
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(object), object);
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(action), action);
 
 		try {
 			await this._authorizationPolicyEntityStorage.remove(
-				this.policyId(policy.subject, policy.object, policy.action)
+				this.policyId(modelId, subject, object, action)
 			);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
@@ -276,7 +241,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 			throw new GeneralError(
 				EntityStorageAuthorizationConnector.CLASS_NAME,
 				"removePolicyFailed",
-				{ subject: policy.subject },
+				{ subject },
 				err
 			);
 		}
@@ -284,16 +249,24 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 
 	/**
 	 * Get all policy rules for a given subject.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject to query.
-	 * @returns The matching policies.
+	 * @param cursor The cursor to request the next chunk of results.
+	 * @param limit Limit the number of entities to return.
+	 * @returns The matching policies and an optional cursor for the next page.
 	 * @throws GeneralError if the query fails.
 	 */
-	public async getPoliciesForSubject(subject: string): Promise<IAuthorizationPolicy[]> {
+	public async getPoliciesForSubject(
+		modelId: string,
+		subject: string,
+		cursor?: string,
+		limit?: number
+	): Promise<{ entities: IAuthorizationPolicy[]; cursor?: string }> {
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
 
 		try {
-			const result = await this.getAllPolicies(subject);
-			return result.entities;
+			return await this.getAllPolicies(modelId, subject, cursor, limit);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -309,6 +282,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 
 	/**
 	 * Get policy rules, optionally filtered by subject.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject Optional subject to filter by.
 	 * @param cursor The cursor to request the next chunk of results.
 	 * @param limit Limit the number of entities to return.
@@ -316,17 +290,24 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	 * @throws GeneralError if the query fails.
 	 */
 	public async getAllPolicies(
+		modelId: string,
 		subject?: string,
 		cursor?: string,
 		limit?: number
 	): Promise<{ entities: IAuthorizationPolicy[]; cursor?: string }> {
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
+
 		try {
-			const condition =
-				subject !== undefined
-					? { property: "subject", value: subject, comparison: ComparisonOperator.Equals }
-					: undefined;
 			const result = await this._authorizationPolicyEntityStorage.query(
-				condition,
+				Is.stringValue(subject)
+					? {
+							logicalOperator: LogicalOperator.And,
+							conditions: [
+								{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
+								{ property: "subject", value: subject, comparison: ComparisonOperator.Equals }
+							]
+						}
+					: { property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
 				undefined,
 				undefined,
 				cursor,
@@ -334,9 +315,9 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 			);
 			return {
 				entities: (result.entities as AuthorizationPolicy[]).map(e => ({
-					subject: e.subject ?? "",
-					object: e.object ?? "",
-					action: e.action ?? ""
+					subject: e.subject,
+					object: e.object,
+					action: e.action
 				})),
 				cursor: result.cursor
 			};
@@ -355,25 +336,29 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 
 	/**
 	 * Get all distinct role names in the system.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param cursor The cursor to request the next chunk of results.
 	 * @param limit Limit the number of roles to return.
 	 * @returns The role names and an optional cursor for the next page.
 	 * @throws GeneralError if the query fails.
 	 */
 	public async getAllRoles(
+		modelId: string,
 		cursor?: string,
 		limit?: number
 	): Promise<{ roles: string[]; cursor?: string }> {
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
+
 		try {
 			const result = await this._authorizationRoleNameEntityStorage.query(
-				undefined,
-				[{ property: "id", sortDirection: SortDirection.Ascending }],
-				["id"],
+				{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
+				[{ property: "name", sortDirection: SortDirection.Ascending }],
+				["name"],
 				cursor,
 				limit
 			);
 			return {
-				roles: result.entities.map(e => e.id).filter((r): r is string => r !== undefined),
+				roles: result.entities.map(e => e.name).filter((r): r is string => r !== undefined),
 				cursor: result.cursor
 			};
 		} catch (err) {
@@ -391,17 +376,21 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 
 	/**
 	 * Check whether each of the given role names exists in the system.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param roles The role names to check.
 	 * @returns An array of booleans in the same order as the input.
 	 * @throws GeneralError if the query fails.
 	 */
-	public async hasRoles(roles: string[]): Promise<boolean[]> {
+	public async hasRoles(modelId: string, roles: string[]): Promise<boolean[]> {
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.array<string>(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(roles), roles);
 
 		try {
 			return await Promise.all(
 				roles.map(async role => {
-					const entity = await this._authorizationRoleNameEntityStorage.get(role);
+					const entity = await this._authorizationRoleNameEntityStorage.get(
+						this.roleNameId(modelId, role)
+					);
 					return entity !== undefined;
 				})
 			);
@@ -420,22 +409,27 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 
 	/**
 	 * Assign a role to a subject.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject to assign the role to.
 	 * @param role The role to assign.
 	 * @returns Nothing.
 	 * @throws GeneralError if the request fails.
 	 */
-	public async addRoleForSubject(subject: string, role: string): Promise<void> {
+	public async addRoleForSubject(modelId: string, subject: string, role: string): Promise<void> {
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(role), role);
 
 		try {
 			const assignment = new AuthorizationRoleAssignment();
-			assignment.id = this.roleId(subject, role);
+			assignment.id = this.roleId(modelId, subject, role);
+			assignment.modelId = modelId;
 			assignment.subject = subject;
 			assignment.role = role;
 			const roleName = new AuthorizationRoleName();
-			roleName.id = role;
+			roleName.id = this.roleNameId(modelId, role);
+			roleName.modelId = modelId;
+			roleName.name = role;
 			await Promise.all([
 				this._authorizationRoleAssignmentEntityStorage.set(assignment),
 				this._authorizationRoleNameEntityStorage.set(roleName)
@@ -455,18 +449,22 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 
 	/**
 	 * Remove a role from a subject.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject to remove the role from.
 	 * @param role The role to remove.
 	 * @returns Nothing.
 	 * @throws GeneralError if the request fails.
 	 */
-	public async removeRoleForSubject(subject: string, role: string): Promise<void> {
+	public async removeRoleForSubject(modelId: string, subject: string, role: string): Promise<void> {
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(role), role);
 
 		try {
-			await this._authorizationRoleAssignmentEntityStorage.remove(this.roleId(subject, role));
-			await this.removeRoleNameIfUnreferenced(role);
+			await this._authorizationRoleAssignmentEntityStorage.remove(
+				this.roleId(modelId, subject, role)
+			);
+			await this.removeRoleNameIfUnreferenced(modelId, role);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -482,16 +480,24 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 
 	/**
 	 * Remove all roles from a subject.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject to remove all roles from.
 	 * @returns Nothing.
 	 * @throws GeneralError if the request fails.
 	 */
-	public async removeAllRolesForSubject(subject: string): Promise<void> {
+	public async removeAllRolesForSubject(modelId: string, subject: string): Promise<void> {
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
 
 		try {
 			const result = await this._authorizationRoleAssignmentEntityStorage.query(
-				{ property: "subject", value: subject, comparison: ComparisonOperator.Equals },
+				{
+					logicalOperator: LogicalOperator.And,
+					conditions: [
+						{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
+						{ property: "subject", value: subject, comparison: ComparisonOperator.Equals }
+					]
+				},
 				undefined,
 				["id", "role"]
 			);
@@ -499,7 +505,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 			const roles = result.entities.map(e => e.role).filter((r): r is string => r !== undefined);
 			if (ids.length > 0) {
 				await this._authorizationRoleAssignmentEntityStorage.removeBatch(ids);
-				await Promise.all(roles.map(async r => this.removeRoleNameIfUnreferenced(r)));
+				await Promise.all(roles.map(async r => this.removeRoleNameIfUnreferenced(modelId, r)));
 			}
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
@@ -516,16 +522,24 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 
 	/**
 	 * Get all roles assigned to a subject.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject to query.
 	 * @returns The assigned roles.
 	 * @throws GeneralError if the query fails.
 	 */
-	public async getRolesForSubject(subject: string): Promise<string[]> {
+	public async getRolesForSubject(modelId: string, subject: string): Promise<string[]> {
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
 
 		try {
 			const result = await this._authorizationRoleAssignmentEntityStorage.query(
-				{ property: "subject", value: subject, comparison: ComparisonOperator.Equals },
+				{
+					logicalOperator: LogicalOperator.And,
+					conditions: [
+						{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
+						{ property: "subject", value: subject, comparison: ComparisonOperator.Equals }
+					]
+				},
 				undefined,
 				["role"]
 			);
@@ -545,16 +559,24 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 
 	/**
 	 * Get all subjects assigned to a given role.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param role The role to query.
 	 * @returns The subjects with the given role.
 	 * @throws GeneralError if the query fails.
 	 */
-	public async getSubjectsForRole(role: string): Promise<string[]> {
+	public async getSubjectsForRole(modelId: string, role: string): Promise<string[]> {
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(role), role);
 
 		try {
 			const result = await this._authorizationRoleAssignmentEntityStorage.query(
-				{ property: "role", value: role, comparison: ComparisonOperator.Equals },
+				{
+					logicalOperator: LogicalOperator.And,
+					conditions: [
+						{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
+						{ property: "role", value: role, comparison: ComparisonOperator.Equals }
+					]
+				},
 				undefined,
 				["subject"]
 			);
@@ -574,18 +596,20 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 
 	/**
 	 * Check whether a subject has a specific role.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject to check.
 	 * @param role The role to check for.
 	 * @returns True if the subject has the role.
 	 * @throws GeneralError if the request fails.
 	 */
-	public async hasRoleForSubject(subject: string, role: string): Promise<boolean> {
+	public async hasRoleForSubject(modelId: string, subject: string, role: string): Promise<boolean> {
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(role), role);
 
 		try {
 			const entity = await this._authorizationRoleAssignmentEntityStorage.get(
-				this.roleId(subject, role)
+				this.roleId(modelId, subject, role)
 			);
 			return entity !== undefined;
 		} catch (err) {
@@ -603,12 +627,18 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 
 	/**
 	 * Define a parent-child inheritance relationship between two roles.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param role The child role that will inherit permissions from the parent.
 	 * @param inheritsFrom The parent role whose permissions are inherited.
 	 * @returns Nothing.
 	 * @throws GeneralError if the request fails.
 	 */
-	public async addRoleInheritance(role: string, inheritsFrom: string): Promise<void> {
+	public async addRoleInheritance(
+		modelId: string,
+		role: string,
+		inheritsFrom: string
+	): Promise<void> {
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(role), role);
 		Guards.stringValue(
 			EntityStorageAuthorizationConnector.CLASS_NAME,
@@ -618,13 +648,18 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 
 		try {
 			const inheritance = new AuthorizationRoleInheritance();
-			inheritance.id = this.inheritanceId(role, inheritsFrom);
+			inheritance.id = this.inheritanceId(modelId, role, inheritsFrom);
+			inheritance.modelId = modelId;
 			inheritance.role = role;
 			inheritance.inheritsFrom = inheritsFrom;
 			const roleNameEntity = new AuthorizationRoleName();
-			roleNameEntity.id = role;
+			roleNameEntity.id = this.roleNameId(modelId, role);
+			roleNameEntity.modelId = modelId;
+			roleNameEntity.name = role;
 			const inheritsFromNameEntity = new AuthorizationRoleName();
-			inheritsFromNameEntity.id = inheritsFrom;
+			inheritsFromNameEntity.id = this.roleNameId(modelId, inheritsFrom);
+			inheritsFromNameEntity.modelId = modelId;
+			inheritsFromNameEntity.name = inheritsFrom;
 			await Promise.all([
 				this._authorizationRoleInheritanceEntityStorage.set(inheritance),
 				this._authorizationRoleNameEntityStorage.set(roleNameEntity),
@@ -645,12 +680,18 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 
 	/**
 	 * Remove a parent-child inheritance relationship between two roles.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param role The child role.
 	 * @param inheritsFrom The parent role to stop inheriting from.
 	 * @returns Nothing.
 	 * @throws GeneralError if the request fails.
 	 */
-	public async removeRoleInheritance(role: string, inheritsFrom: string): Promise<void> {
+	public async removeRoleInheritance(
+		modelId: string,
+		role: string,
+		inheritsFrom: string
+	): Promise<void> {
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(role), role);
 		Guards.stringValue(
 			EntityStorageAuthorizationConnector.CLASS_NAME,
@@ -660,11 +701,11 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 
 		try {
 			await this._authorizationRoleInheritanceEntityStorage.remove(
-				this.inheritanceId(role, inheritsFrom)
+				this.inheritanceId(modelId, role, inheritsFrom)
 			);
 			await Promise.all([
-				this.removeRoleNameIfUnreferenced(role),
-				this.removeRoleNameIfUnreferenced(inheritsFrom)
+				this.removeRoleNameIfUnreferenced(modelId, role),
+				this.removeRoleNameIfUnreferenced(modelId, inheritsFrom)
 			]);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
@@ -681,16 +722,24 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 
 	/**
 	 * Get all roles that a given role directly inherits from.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param role The role to query.
 	 * @returns The parent roles.
 	 * @throws GeneralError if the query fails.
 	 */
-	public async getParentRoles(role: string): Promise<string[]> {
+	public async getParentRoles(modelId: string, role: string): Promise<string[]> {
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(role), role);
 
 		try {
 			const result = await this._authorizationRoleInheritanceEntityStorage.query(
-				{ property: "role", value: role, comparison: ComparisonOperator.Equals },
+				{
+					logicalOperator: LogicalOperator.And,
+					conditions: [
+						{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
+						{ property: "role", value: role, comparison: ComparisonOperator.Equals }
+					]
+				},
 				undefined,
 				["inheritsFrom"]
 			);
@@ -710,16 +759,24 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 
 	/**
 	 * Get all roles that directly inherit from a given role.
+	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param role The role to query.
 	 * @returns The child roles.
 	 * @throws GeneralError if the query fails.
 	 */
-	public async getChildRoles(role: string): Promise<string[]> {
+	public async getChildRoles(modelId: string, role: string): Promise<string[]> {
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(role), role);
 
 		try {
 			const result = await this._authorizationRoleInheritanceEntityStorage.query(
-				{ property: "inheritsFrom", value: role, comparison: ComparisonOperator.Equals },
+				{
+					logicalOperator: LogicalOperator.And,
+					conditions: [
+						{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
+						{ property: "inheritsFrom", value: role, comparison: ComparisonOperator.Equals }
+					]
+				},
 				undefined,
 				["role"]
 			);
@@ -739,61 +796,94 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 
 	/**
 	 * Build the compound primary key for a policy.
+	 * @param modelId The model identifier.
 	 * @param subject The subject.
 	 * @param object The object.
 	 * @param action The action.
 	 * @returns The compound id string.
 	 * @internal
 	 */
-	private policyId(subject: string, object: string, action: string): string {
-		return `${subject}|${object}|${action}`;
+	private policyId(modelId: string, subject: string, object: string, action: string): string {
+		return `${modelId}|${subject}|${object}|${action}`;
 	}
 
 	/**
 	 * Build the compound primary key for a role assignment.
+	 * @param modelId The model identifier.
 	 * @param subject The subject.
 	 * @param role The role.
 	 * @returns The compound id string.
 	 * @internal
 	 */
-	private roleId(subject: string, role: string): string {
-		return `${subject}|${role}`;
+	private roleId(modelId: string, subject: string, role: string): string {
+		return `${modelId}|${subject}|${role}`;
 	}
 
 	/**
 	 * Build the compound primary key for a role inheritance relationship.
+	 * @param modelId The model identifier.
 	 * @param role The child role.
 	 * @param inheritsFrom The parent role.
 	 * @returns The compound id string.
 	 * @internal
 	 */
-	private inheritanceId(role: string, inheritsFrom: string): string {
-		return `${role}|${inheritsFrom}`;
+	private inheritanceId(modelId: string, role: string, inheritsFrom: string): string {
+		return `${modelId}|${role}|${inheritsFrom}`;
+	}
+
+	/**
+	 * Build the compound primary key for a role name index entry.
+	 * @param modelId The model identifier.
+	 * @param name The role name.
+	 * @returns The compound id string.
+	 * @internal
+	 */
+	private roleNameId(modelId: string, name: string): string {
+		return `${modelId}|${name}`;
 	}
 
 	/**
 	 * Remove a role name from the index if it no longer appears in any assignment or inheritance record.
+	 * @param modelId The model identifier.
 	 * @param roleName The role name to check.
 	 * @internal
 	 */
-	private async removeRoleNameIfUnreferenced(roleName: string): Promise<void> {
+	private async removeRoleNameIfUnreferenced(modelId: string, roleName: string): Promise<void> {
 		const [assignmentResult, inheritanceChildResult, inheritanceParentResult] = await Promise.all([
 			this._authorizationRoleAssignmentEntityStorage.query(
-				{ property: "role", value: roleName, comparison: ComparisonOperator.Equals },
+				{
+					logicalOperator: LogicalOperator.And,
+					conditions: [
+						{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
+						{ property: "role", value: roleName, comparison: ComparisonOperator.Equals }
+					]
+				},
 				undefined,
 				["id"],
 				undefined,
 				1
 			),
 			this._authorizationRoleInheritanceEntityStorage.query(
-				{ property: "role", value: roleName, comparison: ComparisonOperator.Equals },
+				{
+					logicalOperator: LogicalOperator.And,
+					conditions: [
+						{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
+						{ property: "role", value: roleName, comparison: ComparisonOperator.Equals }
+					]
+				},
 				undefined,
 				["id"],
 				undefined,
 				1
 			),
 			this._authorizationRoleInheritanceEntityStorage.query(
-				{ property: "inheritsFrom", value: roleName, comparison: ComparisonOperator.Equals },
+				{
+					logicalOperator: LogicalOperator.And,
+					conditions: [
+						{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
+						{ property: "inheritsFrom", value: roleName, comparison: ComparisonOperator.Equals }
+					]
+				},
 				undefined,
 				["id"],
 				undefined,
@@ -806,7 +896,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 			inheritanceChildResult.entities.length === 0 &&
 			inheritanceParentResult.entities.length === 0
 		) {
-			await this._authorizationRoleNameEntityStorage.remove(roleName);
+			await this._authorizationRoleNameEntityStorage.remove(this.roleNameId(modelId, roleName));
 		}
 	}
 }

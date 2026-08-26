@@ -7,6 +7,16 @@ import type { IAuthorizationPolicy } from "../IAuthorizationPolicy.js";
  */
 export interface IAuthorizationRemovePolicyRequest {
 	/**
+	 * The request path parameters.
+	 */
+	pathParams: {
+		/**
+		 * The model identifier selecting which policy set to use.
+		 */
+		modelId: string;
+	};
+
+	/**
 	 * The request data.
 	 */
 	body: IAuthorizationPolicy;

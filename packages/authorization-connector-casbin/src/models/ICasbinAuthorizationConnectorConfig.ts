@@ -21,11 +21,6 @@ export interface ICasbinAuthorizationConnectorConfig {
 	clientSecret: string;
 
 	/**
-	 * The enforcer identifier in "owner/name" format (e.g. "built-in/built-in").
-	 */
-	enforcerId: string;
-
-	/**
 	 * The request timeout in milliseconds.
 	 */
 	timeoutMs?: number;

@@ -2,7 +2,6 @@
 	"error": {
 		"entityStorageAuthorizationConnector": {
 			"checkFailed": "Failed to check authorization for subject \"{subject}\" on object \"{object}\" with action \"{action}\".",
-			"checkAnyFailed": "Failed to check authorization for any subject on object \"{object}\" with action \"{action}\".",
 			"addPolicyFailed": "Failed to add authorization policy for subject \"{subject}\".",
 			"removePolicyFailed": "Failed to remove authorization policy for subject \"{subject}\".",
 			"getPoliciesForSubjectFailed": "Failed to get policies for subject \"{subject}\".",

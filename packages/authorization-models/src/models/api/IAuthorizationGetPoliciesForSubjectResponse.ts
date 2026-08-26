@@ -13,6 +13,11 @@ export interface IAuthorizationGetPoliciesForSubjectResponse {
 		/**
 		 * The list of policies for the subject.
 		 */
-		policies: IAuthorizationPolicy[];
+		entities: IAuthorizationPolicy[];
+
+		/**
+		 * An optional cursor for the next page of results.
+		 */
+		cursor?: string;
 	};
 }

@@ -1,6 +1,5 @@
 // Copyright 2026 IOTA Stiftung.
 // SPDX-License-Identifier: Apache-2.0.
-import type { IAuthorizationRules } from "@twin.org/authorization-models";
 
 /**
  * Configuration for the Authorization Service.
@@ -12,9 +11,10 @@ export interface IAuthorizationServiceConfig {
 	defaultNamespace?: string;
 
 	/**
-	 * An optional set of rules to apply when the service starts.
+	 * The model identifier to use when migrating old authorization data.
+	 * @default rest.
 	 */
-	defaultRules?: IAuthorizationRules;
+	migrationModelId?: string;
 
 	/**
 	 * Maximum number of check results to hold in the cache; defaults to 1000.

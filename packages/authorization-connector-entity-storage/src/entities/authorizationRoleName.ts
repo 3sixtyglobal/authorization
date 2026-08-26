@@ -8,8 +8,20 @@ import { entity, property } from "@twin.org/entity";
 @entity()
 export class AuthorizationRoleName {
 	/**
-	 * The role name, used as the primary key to guarantee uniqueness.
+	 * The compound identifier for this role name entry, in "modelId|name" format.
 	 */
 	@property({ type: "string", isPrimary: true })
 	public id!: string;
+
+	/**
+	 * The model identifier partitioning this role name.
+	 */
+	@property({ type: "string", isSecondary: true })
+	public modelId!: string;
+
+	/**
+	 * The role name.
+	 */
+	@property({ type: "string", isSecondary: true })
+	public name!: string;
 }

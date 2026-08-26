@@ -4,14 +4,15 @@
 /**
  * Configuration for the authorization processor
  */
-export interface IAuthorizationProcessorConfig {
+export interface IAuthorizationRestProcessorConfig {
 	/**
 	 * Include the stack with errors.
 	 */
 	includeErrorStack?: boolean;
 
 	/**
-	 * The role to use when no roles are present in the context IDs.
+	 * The model identifier to use when checking route authorization.
+	 * @default rest.
 	 */
-	defaultRole?: string;
+	authorizationModelId?: string;
 }

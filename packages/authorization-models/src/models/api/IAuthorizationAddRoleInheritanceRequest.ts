@@ -10,6 +10,11 @@ export interface IAuthorizationAddRoleInheritanceRequest {
 	 */
 	pathParams: {
 		/**
+		 * The model identifier selecting which policy set to use.
+		 */
+		modelId: string;
+
+		/**
 		 * The role to add the inheritance to.
 		 */
 		role: string;

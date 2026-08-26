@@ -6,6 +6,16 @@
  */
 export interface IAuthorizationCheckRequest {
 	/**
+	 * The request path parameters.
+	 */
+	pathParams: {
+		/**
+		 * The model identifier selecting which policy set to use.
+		 */
+		modelId: string;
+	};
+
+	/**
 	 * The request data.
 	 */
 	body: {
