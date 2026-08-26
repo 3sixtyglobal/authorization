@@ -4,6 +4,7 @@ import type {
 	IHttpRequestContext,
 	INoContentResponse,
 	IRestRoute,
+	IRouteAuthorization,
 	ITag
 } from "@twin.org/api-models";
 import type {
@@ -17,8 +18,6 @@ import type {
 	IAuthorizationGetAllPoliciesResponse,
 	IAuthorizationGetAllRolesRequest,
 	IAuthorizationGetAllRolesResponse,
-	IAuthorizationHasRolesRequest,
-	IAuthorizationHasRolesResponse,
 	IAuthorizationGetChildRolesRequest,
 	IAuthorizationGetChildRolesResponse,
 	IAuthorizationGetParentRolesRequest,
@@ -31,6 +30,8 @@ import type {
 	IAuthorizationGetSubjectsForRoleResponse,
 	IAuthorizationHasRoleForSubjectRequest,
 	IAuthorizationHasRoleForSubjectResponse,
+	IAuthorizationHasRolesRequest,
+	IAuthorizationHasRolesResponse,
 	IAuthorizationRemoveAllRolesForSubjectRequest,
 	IAuthorizationRemovePolicyRequest,
 	IAuthorizationRemoveRoleForSubjectRequest,
@@ -43,12 +44,16 @@ import { HttpStatusCode } from "@twin.org/web";
 const ROUTES_SOURCE = "authorizationRoutes";
 
 /**
- * The default permissions for the routes, used to seed authorization rules.
+ * The default authorization for the routes, used to seed authorization rules.
  */
-const DEFAULT_ROUTE_PERMISSIONS_READER = "authorization:read";
-const DEFAULT_ROUTE_PERMISSIONS_WRITER = {
-	permission: "authorization:write",
-	inherits: [DEFAULT_ROUTE_PERMISSIONS_READER]
+const DEFAULT_AUTHORIZATION_READER: IRouteAuthorization = {
+	permission: "tenant:read",
+	role: "authorization-admin"
+};
+const DEFAULT_AUTHORIZATION_WRITER: IRouteAuthorization = {
+	permission: "tenant:write",
+	role: "authorization-admin",
+	inherits: [DEFAULT_AUTHORIZATION_READER.permission]
 };
 
 /**
@@ -112,7 +117,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_READER
+		defaultAuthorization: DEFAULT_AUTHORIZATION_READER
 	};
 
 	const addPolicyRoute: IRestRoute<IAuthorizationAddPolicyRequest, INoContentResponse> = {
@@ -154,7 +159,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_WRITER
+		defaultAuthorization: DEFAULT_AUTHORIZATION_WRITER
 	};
 
 	const removePolicyRoute: IRestRoute<IAuthorizationRemovePolicyRequest, INoContentResponse> = {
@@ -196,7 +201,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_WRITER
+		defaultAuthorization: DEFAULT_AUTHORIZATION_WRITER
 	};
 
 	const getAllPoliciesRoute: IRestRoute<
@@ -237,7 +242,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_READER
+		defaultAuthorization: DEFAULT_AUTHORIZATION_READER
 	};
 
 	const getAllRolesRoute: IRestRoute<
@@ -278,7 +283,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_READER
+		defaultAuthorization: DEFAULT_AUTHORIZATION_READER
 	};
 
 	const hasRolesRoute: IRestRoute<IAuthorizationHasRolesRequest, IAuthorizationHasRolesResponse> = {
@@ -318,7 +323,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_READER
+		defaultAuthorization: DEFAULT_AUTHORIZATION_READER
 	};
 
 	const getPoliciesForSubjectRoute: IRestRoute<
@@ -361,7 +366,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_READER
+		defaultAuthorization: DEFAULT_AUTHORIZATION_READER
 	};
 
 	const addRoleForSubjectRoute: IRestRoute<
@@ -398,7 +403,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_WRITER
+		defaultAuthorization: DEFAULT_AUTHORIZATION_WRITER
 	};
 
 	const removeRoleForSubjectRoute: IRestRoute<
@@ -434,7 +439,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_WRITER
+		defaultAuthorization: DEFAULT_AUTHORIZATION_WRITER
 	};
 
 	const removeAllRolesForSubjectRoute: IRestRoute<
@@ -470,7 +475,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_WRITER
+		defaultAuthorization: DEFAULT_AUTHORIZATION_WRITER
 	};
 
 	const getRolesForSubjectRoute: IRestRoute<
@@ -508,7 +513,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_READER
+		defaultAuthorization: DEFAULT_AUTHORIZATION_READER
 	};
 
 	const hasRoleForSubjectRoute: IRestRoute<
@@ -546,7 +551,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_READER
+		defaultAuthorization: DEFAULT_AUTHORIZATION_READER
 	};
 
 	const getSubjectsForRoleRoute: IRestRoute<
@@ -584,7 +589,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_READER
+		defaultAuthorization: DEFAULT_AUTHORIZATION_READER
 	};
 
 	const addRoleInheritanceRoute: IRestRoute<
@@ -621,7 +626,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_WRITER
+		defaultAuthorization: DEFAULT_AUTHORIZATION_WRITER
 	};
 
 	const removeRoleInheritanceRoute: IRestRoute<
@@ -657,7 +662,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_WRITER
+		defaultAuthorization: DEFAULT_AUTHORIZATION_WRITER
 	};
 
 	const getParentRolesRoute: IRestRoute<
@@ -695,7 +700,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_READER
+		defaultAuthorization: DEFAULT_AUTHORIZATION_READER
 	};
 
 	const getChildRolesRoute: IRestRoute<
@@ -733,7 +738,7 @@ export function generateRestRoutesAuthorization(
 				]
 			}
 		],
-		defaultPermission: DEFAULT_ROUTE_PERMISSIONS_READER
+		defaultAuthorization: DEFAULT_AUTHORIZATION_READER
 	};
 
 	return [
