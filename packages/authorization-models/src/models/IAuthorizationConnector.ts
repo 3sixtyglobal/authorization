@@ -1,12 +1,21 @@
 // Copyright 2026 IOTA Stiftung.
 // SPDX-License-Identifier: Apache-2.0.
 import type { IComponent } from "@twin.org/core";
+import type { IAuthorizationModel } from "./IAuthorizationModel.js";
 import type { IAuthorizationPolicy } from "./IAuthorizationPolicy.js";
 
 /**
  * Interface describing an authorization connector.
  */
 export interface IAuthorizationConnector extends IComponent {
+	/**
+	 * Build the authorization model by applying a set of policies and role inheritances.
+	 * @param modelId The model identifier selecting which policy set to use.
+	 * @param model The policies and role inheritances to apply.
+	 * @returns A promise that resolves when the model has been built.
+	 */
+	build(modelId: string, model: IAuthorizationModel): Promise<void>;
+
 	/**
 	 * Check whether a subject is permitted to perform an action on a resource.
 	 * @param modelId The model identifier selecting which policy set to use.

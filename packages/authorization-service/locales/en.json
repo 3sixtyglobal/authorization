@@ -18,7 +18,8 @@
 			"addRoleInheritanceFailed": "The addition of the role inheritance failed",
 			"removeRoleInheritanceFailed": "The removal of the role inheritance failed",
 			"getParentRolesFailed": "The retrieval of parent roles failed",
-			"getChildRolesFailed": "The retrieval of child roles failed"
+			"getChildRolesFailed": "The retrieval of child roles failed",
+			"buildFailed": "The build of the authorization model failed"
 		},
 		"authorizationRestProcessor": {
 			"routeIdMissing": "The route ID is missing",

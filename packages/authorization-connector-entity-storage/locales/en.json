@@ -17,7 +17,8 @@
 			"addRoleInheritanceFailed": "Failed to add inheritance from role \"{inheritsFrom}\" to role \"{role}\".",
 			"removeRoleInheritanceFailed": "Failed to remove inheritance from role \"{inheritsFrom}\" from role \"{role}\".",
 			"getParentRolesFailed": "Failed to retrieve parent roles for role \"{role}\".",
-			"getChildRolesFailed": "Failed to retrieve child roles for role \"{role}\"."
+			"getChildRolesFailed": "Failed to retrieve child roles for role \"{role}\".",
+			"buildFailed": "Failed to build the authorization model."
 		}
 	}
 }

@@ -1,6 +1,10 @@
 // Copyright 2026 IOTA Stiftung.
 // SPDX-License-Identifier: Apache-2.0.
-import type { IAuthorizationConnector, IAuthorizationPolicy } from "@twin.org/authorization-models";
+import type {
+	IAuthorizationConnector,
+	IAuthorizationModel,
+	IAuthorizationPolicy
+} from "@twin.org/authorization-models";
 import { ContextIdKeys, ContextIdStore } from "@twin.org/context";
 import {
 	BaseError,
@@ -157,6 +161,35 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 				data: { address: this._config.endpoint }
 			});
 			return false;
+		}
+	}
+
+	/**
+	 * Build the authorization model by applying a set of policies and role inheritances.
+	 * @param modelId The model identifier selecting which policy set to use.
+	 * @param model The policies and role inheritances to apply.
+	 * @returns Nothing.
+	 */
+	public async build(modelId: string, model: IAuthorizationModel): Promise<void> {
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
+
+		try {
+			for (const policy of model.policies ?? []) {
+				await this.addPolicy(modelId, policy.subject, policy.object, policy.action);
+			}
+			for (const inheritance of model.roleInheritances ?? []) {
+				await this.addRoleInheritance(modelId, inheritance.role, inheritance.inheritsFrom);
+			}
+		} catch (err) {
+			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
+				throw err;
+			}
+			throw new GeneralError(
+				CasbinAuthorizationConnector.CLASS_NAME,
+				"buildFailed",
+				undefined,
+				err
+			);
 		}
 	}
 

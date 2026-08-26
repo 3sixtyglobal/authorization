@@ -28,6 +28,8 @@ import type {
 	IAuthorizationHasRoleForSubjectRequest,
 	IAuthorizationHasRoleForSubjectResponse,
 	IAuthorizationPolicy,
+	IAuthorizationBuildRequest,
+	IAuthorizationModel,
 	IAuthorizationRemoveAllRolesForSubjectRequest,
 	IAuthorizationRemovePolicyRequest,
 	IAuthorizationRemoveRoleForSubjectRequest,
@@ -60,6 +62,21 @@ export class AuthorizationRestClient extends BaseRestClient implements IAuthoriz
 	 */
 	public className(): string {
 		return AuthorizationRestClient.CLASS_NAME;
+	}
+
+	/**
+	 * Build the authorization model by applying a set of policies and role inheritances.
+	 * @param modelId The model identifier selecting which policy set to use.
+	 * @param model The policies and role inheritances to apply.
+	 * @returns Nothing.
+	 */
+	public async build(modelId: string, model: IAuthorizationModel): Promise<void> {
+		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(modelId), modelId);
+
+		await this.fetch<IAuthorizationBuildRequest, never>("/:modelId", HttpMethod.POST, {
+			pathParams: { modelId },
+			body: model
+		});
 	}
 
 	/**

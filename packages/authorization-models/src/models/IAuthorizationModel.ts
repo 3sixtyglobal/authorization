@@ -4,9 +4,9 @@ import type { IAuthorizationInheritance } from "./IAuthorizationInheritance.js";
 import type { IAuthorizationPolicy } from "./IAuthorizationPolicy.js";
 
 /**
- * Defines multiple authorization rules.
+ * Defines a set of authorization rules as a model.
  */
-export interface IAuthorizationRules {
+export interface IAuthorizationModel {
 	/**
 	 * Direct policy rules to apply.
 	 */

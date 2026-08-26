@@ -1,8 +1,8 @@
 // Copyright 2026 IOTA Stiftung.
 // SPDX-License-Identifier: Apache-2.0.
 export * from "./factories/authorizationConnectorFactory.js";
-export * from "./helpers/rulesHelper.js";
 export * from "./models/api/IAuthorizationAddPolicyRequest.js";
+export * from "./models/api/IAuthorizationBuildRequest.js";
 export * from "./models/api/IAuthorizationAddRoleForSubjectRequest.js";
 export * from "./models/api/IAuthorizationAddRoleInheritanceRequest.js";
 export * from "./models/api/IAuthorizationCheckRequest.js";
@@ -34,5 +34,5 @@ export * from "./models/authorizationMetrics.js";
 export * from "./models/IAuthorizationComponent.js";
 export * from "./models/IAuthorizationConnector.js";
 export * from "./models/IAuthorizationInheritance.js";
+export * from "./models/IAuthorizationModel.js";
 export * from "./models/IAuthorizationPolicy.js";
-export * from "./models/IAuthorizationRules.js";

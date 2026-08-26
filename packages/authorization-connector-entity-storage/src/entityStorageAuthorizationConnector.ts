@@ -1,6 +1,10 @@
 // Copyright 2026 IOTA Stiftung.
 // SPDX-License-Identifier: Apache-2.0.
-import type { IAuthorizationConnector, IAuthorizationPolicy } from "@twin.org/authorization-models";
+import type {
+	IAuthorizationConnector,
+	IAuthorizationModel,
+	IAuthorizationPolicy
+} from "@twin.org/authorization-models";
 import { BaseError, GeneralError, Guards, Is } from "@twin.org/core";
 import { ComparisonOperator, LogicalOperator, SortDirection } from "@twin.org/entity";
 import {
@@ -77,6 +81,35 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	 */
 	public className(): string {
 		return EntityStorageAuthorizationConnector.CLASS_NAME;
+	}
+
+	/**
+	 * Build the authorization model by applying a set of policies and role inheritances.
+	 * @param modelId The model identifier selecting which policy set to use.
+	 * @param model The policies and role inheritances to apply.
+	 * @returns Nothing.
+	 */
+	public async build(modelId: string, model: IAuthorizationModel): Promise<void> {
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
+
+		try {
+			for (const policy of model.policies ?? []) {
+				await this.addPolicy(modelId, policy.subject, policy.object, policy.action);
+			}
+			for (const inheritance of model.roleInheritances ?? []) {
+				await this.addRoleInheritance(modelId, inheritance.role, inheritance.inheritsFrom);
+			}
+		} catch (err) {
+			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
+				throw err;
+			}
+			throw new GeneralError(
+				EntityStorageAuthorizationConnector.CLASS_NAME,
+				"buildFailed",
+				undefined,
+				err
+			);
+		}
 	}
 
 	/**

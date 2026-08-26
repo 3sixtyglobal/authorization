@@ -6,6 +6,7 @@ import {
 	AuthorizationConnectorFactory,
 	type IAuthorizationComponent,
 	type IAuthorizationConnector,
+	type IAuthorizationModel,
 	type IAuthorizationPolicy
 } from "@twin.org/authorization-models";
 import { ContextIdKeys, ContextIdStore, type IContextIds } from "@twin.org/context";
@@ -42,10 +43,16 @@ export class AuthorizationService implements IAuthorizationComponent {
 	private readonly _telemetryComponent?: ITelemetryComponent;
 
 	/**
-	 * LFU cache for check() results, keyed by tenant-aware composite key.
+	 * LFU cache config used when creating per-model check() caches.
 	 * @internal
 	 */
-	private readonly _checkCache: LfuCache<boolean>;
+	private readonly _checkCacheConfig: { capacity?: number; ttiMs: number };
+
+	/**
+	 * Per-model LFU caches for check() results, keyed by model identifier.
+	 * @internal
+	 */
+	private readonly _checkCache: Map<string, LfuCache<boolean>>;
 
 	/**
 	 * Create a new instance of AuthorizationService.
@@ -65,10 +72,11 @@ export class AuthorizationService implements IAuthorizationComponent {
 		this._defaultNamespace = options?.config?.defaultNamespace ?? names[0];
 		this._migrationModelId = options?.config?.migrationModelId ?? "rest";
 
-		this._checkCache = new LfuCache<boolean>({
+		this._checkCacheConfig = {
 			capacity: options?.config?.checkCacheCapacity,
 			ttiMs: options?.config?.checkCacheTtiMs ?? 60000
-		});
+		};
+		this._checkCache = new Map<string, LfuCache<boolean>>();
 	}
 
 	/**
@@ -108,6 +116,24 @@ export class AuthorizationService implements IAuthorizationComponent {
 	}
 
 	/**
+	 * Build the authorization model by applying a set of policies and role inheritances.
+	 * @param modelId The model identifier selecting which policy set to use.
+	 * @param model The policies and role inheritances to apply.
+	 * @returns Nothing.
+	 */
+	public async build(modelId: string, model: IAuthorizationModel): Promise<void> {
+		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(modelId), modelId);
+
+		try {
+			const connector = this.getConnector();
+			await connector.build(modelId, model);
+			this.invalidateCacheForModel(modelId);
+		} catch (error) {
+			throw new GeneralError(AuthorizationService.CLASS_NAME, "buildFailed", undefined, error);
+		}
+	}
+
+	/**
 	 * Check whether a subject is permitted to perform an action on a resource.
 	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject requesting access.
@@ -128,8 +154,8 @@ export class AuthorizationService implements IAuthorizationComponent {
 
 		try {
 			const connector = this.getConnector();
-			const key = await this.buildCacheKey(modelId, subject, object, action);
-			return await this._checkCache.getOrSet(key, async () =>
+			const key = await this.buildCacheKey(subject, object, action);
+			return await this.getModelCache(modelId).getOrSet(key, async () =>
 				connector.check(modelId, subject, object, action)
 			);
 		} catch (error) {
@@ -591,23 +617,32 @@ export class AuthorizationService implements IAuthorizationComponent {
 	}
 
 	/**
-	 * Build a tenant-and-model-aware cache key.
-	 * @param modelId The model identifier.
+	 * Build a tenant-aware cache key for a check result.
 	 * @param subject The subject.
 	 * @param object The object.
 	 * @param action The action.
 	 * @returns The cache key string.
 	 * @internal
 	 */
-	private async buildCacheKey(
-		modelId: string,
-		subject: string,
-		object: string,
-		action: string
-	): Promise<string> {
+	private async buildCacheKey(subject: string, object: string, action: string): Promise<string> {
 		const contextIds = await ContextIdStore.getContextIds();
 		const tenantId = contextIds?.[ContextIdKeys.Tenant] ?? "";
-		return `${tenantId}:${modelId}:${subject}:${object}:${action}`;
+		return `${tenantId}:${subject}:${object}:${action}`;
+	}
+
+	/**
+	 * Get or create the per-model LFU cache.
+	 * @param modelId The model identifier.
+	 * @returns The LFU cache for the model.
+	 * @internal
+	 */
+	private getModelCache(modelId: string): LfuCache<boolean> {
+		let cache = this._checkCache.get(modelId);
+		if (cache === undefined) {
+			cache = new LfuCache<boolean>(this._checkCacheConfig);
+			this._checkCache.set(modelId, cache);
+		}
+		return cache;
 	}
 
 	/**
@@ -624,25 +659,38 @@ export class AuthorizationService implements IAuthorizationComponent {
 		object: string,
 		action: string
 	): Promise<void> {
-		const key = await this.buildCacheKey(modelId, subject, object, action);
-		this._checkCache.delete(key);
+		const key = await this.buildCacheKey(subject, object, action);
+		this._checkCache.get(modelId)?.delete(key);
 	}
 
 	/**
-	 * Evict all cached check() results whose key starts with the given part under the current tenant and model.
+	 * Evict all cached check() results whose key starts with the given part under the current tenant.
 	 * @param modelId The model identifier.
 	 * @param part The subject or role name to use as the key prefix segment.
 	 * @internal
 	 */
 	private async invalidateCacheByPrefix(modelId: string, part: string): Promise<void> {
+		const modelCache = this._checkCache.get(modelId);
+		if (modelCache === undefined) {
+			return;
+		}
 		const contextIds = await ContextIdStore.getContextIds();
 		const tenantId = contextIds?.[ContextIdKeys.Tenant] ?? "";
-		const prefix = `${tenantId}:${modelId}:${part}:`;
-		for (const key of this._checkCache.keys()) {
+		const prefix = `${tenantId}:${part}:`;
+		for (const key of modelCache.keys()) {
 			if (key.startsWith(prefix)) {
-				this._checkCache.delete(key);
+				modelCache.delete(key);
 			}
 		}
+	}
+
+	/**
+	 * Evict all cached check() results for the given model.
+	 * @param modelId The model identifier.
+	 * @internal
+	 */
+	private invalidateCacheForModel(modelId: string): void {
+		this._checkCache.delete(modelId);
 	}
 
 	/**

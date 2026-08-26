@@ -11,7 +11,7 @@ import {
 } from "@twin.org/authorization-connector-entity-storage";
 import {
 	AuthorizationConnectorFactory,
-	type IAuthorizationRules
+	type IAuthorizationModel
 } from "@twin.org/authorization-models";
 import { ContextIdKeys, type IContextIds } from "@twin.org/context";
 import { ComponentFactory } from "@twin.org/core";
@@ -108,7 +108,7 @@ describe("AuthorizationRestProcessor (entity-storage backed)", () => {
 		return userId !== undefined ? { [ContextIdKeys.User]: userId } : {};
 	}
 
-	async function initialize(rules: IAuthorizationRules): Promise<void> {
+	async function initialize(rules: IAuthorizationModel): Promise<void> {
 		for (const policy of rules.policies ?? []) {
 			await service.addPolicy(TEST_MODEL_ID, policy.subject, policy.object, policy.action);
 		}

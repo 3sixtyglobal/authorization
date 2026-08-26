@@ -11,6 +11,7 @@ import type {
 	IAuthorizationAddPolicyRequest,
 	IAuthorizationAddRoleForSubjectRequest,
 	IAuthorizationAddRoleInheritanceRequest,
+	IAuthorizationBuildRequest,
 	IAuthorizationCheckRequest,
 	IAuthorizationCheckResponse,
 	IAuthorizationComponent,
@@ -76,6 +77,45 @@ export function generateRestRoutesAuthorization(
 	baseRouteName: string,
 	componentName: string
 ): IRestRoute[] {
+	const buildRoute: IRestRoute<IAuthorizationBuildRequest, INoContentResponse> = {
+		operationId: "authorizationBuild",
+		summary: "Build an authorization model",
+		tag: tagsAuthorization[0].name,
+		method: "POST",
+		path: `${baseRouteName}/:modelId`,
+		handler: async (httpRequestContext, request) =>
+			authorizationBuild(httpRequestContext, componentName, request),
+		requestType: {
+			type: nameof<IAuthorizationBuildRequest>(),
+			examples: [
+				{
+					id: "authorizationBuildExample",
+					request: {
+						pathParams: { modelId: "default" },
+						body: {
+							policies: [
+								{ subject: "tenant:read", object: "authorizationCheck", action: "execute" }
+							],
+							roleInheritances: [{ role: "authorization-admin", inheritsFrom: "tenant:read" }]
+						}
+					}
+				}
+			]
+		},
+		responseType: [
+			{
+				type: nameof<INoContentResponse>(),
+				examples: [
+					{
+						id: "authorizationBuildResponseExample",
+						response: { statusCode: HttpStatusCode.noContent }
+					}
+				]
+			}
+		],
+		defaultAuthorization: DEFAULT_AUTHORIZATION_WRITER
+	};
+
 	const checkRoute: IRestRoute<IAuthorizationCheckRequest, IAuthorizationCheckResponse> = {
 		operationId: "authorizationCheck",
 		summary: "Check an authorization policy",
@@ -742,6 +782,7 @@ export function generateRestRoutesAuthorization(
 	};
 
 	return [
+		buildRoute,
 		checkRoute,
 		addPolicyRoute,
 		removePolicyRoute,
@@ -1331,4 +1372,35 @@ export async function authorizationGetChildRoles(
 	const roles = await component.getChildRoles(request.pathParams.modelId, request.pathParams.role);
 
 	return { body: { roles } };
+}
+
+/**
+ * Perform the build authorization model operation.
+ * @param httpRequestContext The request context for the API.
+ * @param componentName The name of the component to use in the routes.
+ * @param request The request.
+ * @returns The response object with additional http response properties.
+ */
+export async function authorizationBuild(
+	httpRequestContext: IHttpRequestContext,
+	componentName: string,
+	request: IAuthorizationBuildRequest
+): Promise<INoContentResponse> {
+	Guards.object<IAuthorizationBuildRequest>(ROUTES_SOURCE, nameof(request), request);
+	Guards.object<IAuthorizationBuildRequest["pathParams"]>(
+		ROUTES_SOURCE,
+		nameof(request.pathParams),
+		request.pathParams
+	);
+	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.modelId), request.pathParams.modelId);
+	Guards.object<IAuthorizationBuildRequest["body"]>(
+		ROUTES_SOURCE,
+		nameof(request.body),
+		request.body
+	);
+
+	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
+	await component.build(request.pathParams.modelId, request.body);
+
+	return { statusCode: HttpStatusCode.noContent };
 }
