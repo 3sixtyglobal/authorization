@@ -17,12 +17,14 @@ export interface IAuthorizationServiceConfig {
 	migrationModelId?: string;
 
 	/**
-	 * Maximum number of check results to hold in the cache; defaults to 1000.
+	 * Maximum number of check results to hold in the cache
+	 * @default 1000.
 	 */
 	checkCacheCapacity?: number;
 
 	/**
-	 * Time-to-idle in milliseconds for cached check results; defaults to 10000.
+	 * Time-to-idle in milliseconds for cached check results.
+	 * @default 60000.
 	 */
 	checkCacheTtiMs?: number;
 }

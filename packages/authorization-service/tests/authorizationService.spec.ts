@@ -366,6 +366,48 @@ describe("AuthorizationService", () => {
 
 			expect(spy).toHaveBeenCalledTimes(3);
 		});
+
+		test("removePolicy re-check reflects revoked access on exact subject", async () => {
+			await connector.addPolicy(TEST_MODEL_ID, "alice", "readData", "execute");
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+
+			const before = await service.check(TEST_MODEL_ID, "alice", "readData", "execute");
+			expect(before).toBe(true);
+
+			await service.removePolicy(TEST_MODEL_ID, "alice", "readData", "execute");
+
+			const after = await service.check(TEST_MODEL_ID, "alice", "readData", "execute");
+			expect(after).toBe(false);
+		});
+
+		test("removeRoleForSubject re-check reflects revoked role", async () => {
+			await connector.addPolicy(TEST_MODEL_ID, "admin", "readData", "execute");
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "admin");
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+
+			const before = await service.check(TEST_MODEL_ID, "alice", "readData", "execute");
+			expect(before).toBe(true);
+
+			await service.removeRoleForSubject(TEST_MODEL_ID, "alice", "admin");
+
+			const after = await service.check(TEST_MODEL_ID, "alice", "readData", "execute");
+			expect(after).toBe(false);
+		});
+
+		test("build clears all cached results for the model", async () => {
+			await connector.addPolicy(TEST_MODEL_ID, "alice", "readData", "execute");
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			const spy = vi.spyOn(connector, "check");
+
+			await service.check(TEST_MODEL_ID, "alice", "readData", "execute");
+			await service.check(TEST_MODEL_ID, "alice", "readData", "execute");
+			expect(spy).toHaveBeenCalledTimes(1);
+
+			await service.build(TEST_MODEL_ID, { policies: [], roleInheritances: [] });
+
+			await service.check(TEST_MODEL_ID, "alice", "readData", "execute");
+			expect(spy).toHaveBeenCalledTimes(2);
+		});
 	});
 
 	describe("start", () => {

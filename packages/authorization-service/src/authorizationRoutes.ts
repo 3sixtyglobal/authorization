@@ -941,12 +941,11 @@ export async function authorizationGetAllPolicies(
 	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.modelId), request.pathParams.modelId);
 
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
-	const limit = request.query?.limit !== undefined ? parseInt(request.query.limit, 10) : undefined;
 	const result = await component.getAllPolicies(
 		request.pathParams.modelId,
 		request.query?.subject,
 		request.query?.cursor,
-		limit
+		Coerce.integer(request.query?.limit)
 	);
 
 	return { body: result };
@@ -973,11 +972,10 @@ export async function authorizationGetAllRoles(
 	Guards.stringValue(ROUTES_SOURCE, nameof(request.pathParams.modelId), request.pathParams.modelId);
 
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
-	const limit = request.query?.limit !== undefined ? parseInt(request.query.limit, 10) : undefined;
 	const result = await component.getAllRoles(
 		request.pathParams.modelId,
 		request.query?.cursor,
-		limit
+		Coerce.integer(request.query?.limit)
 	);
 
 	return { body: result };

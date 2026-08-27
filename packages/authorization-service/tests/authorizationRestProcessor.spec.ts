@@ -384,7 +384,7 @@ describe("AuthorizationRestProcessor (entity-storage backed)", () => {
 			expect(response.statusCode).toBe(HttpStatusCode.ok);
 		});
 
-		test("denies when contextIds has no userId and no defaultRole is configured", async () => {
+		test("denies when no userId is present in context", async () => {
 			await initialize({});
 
 			const response = makeResponse();
