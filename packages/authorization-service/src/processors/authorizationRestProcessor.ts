@@ -77,7 +77,7 @@ export class AuthorizationRestProcessor implements IBaseRouteProcessor {
 		contextIds: IContextIds,
 		processorState: { [id: string]: unknown }
 	): Promise<void> {
-		if (!Is.empty(route) && (route.requiresAuthorization ?? true)) {
+		if (!Is.empty(route) && !(route.skipAuth ?? false) && (route.requiresAuthorization ?? true)) {
 			try {
 				const routeId = route.operationId;
 				if (!Is.stringValue(routeId)) {

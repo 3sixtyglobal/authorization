@@ -48,12 +48,12 @@ const ROUTES_SOURCE = "authorizationRoutes";
  * The default authorization for the routes, used to seed authorization rules.
  */
 const DEFAULT_AUTHORIZATION_READER: IRouteAuthorization = {
-	permission: "tenant:read",
-	role: "authorization-admin"
+	permission: "authorization:read",
+	role: "user-admin"
 };
 const DEFAULT_AUTHORIZATION_WRITER: IRouteAuthorization = {
-	permission: "tenant:write",
-	role: "authorization-admin",
+	permission: "authorization:write",
+	role: "user-admin",
 	inherits: [DEFAULT_AUTHORIZATION_READER.permission]
 };
 

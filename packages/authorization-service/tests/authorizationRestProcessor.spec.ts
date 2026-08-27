@@ -100,8 +100,12 @@ describe("AuthorizationRestProcessor (entity-storage backed)", () => {
 		return { statusCode: HttpStatusCode.ok, headers: {}, body: {} };
 	}
 
-	function makeRoute(operationId: string, requiresAuthorization?: boolean): IBaseRoute {
-		return { operationId, path: "/api/test", requiresAuthorization };
+	function makeRoute(
+		operationId: string,
+		requiresAuthorization?: boolean,
+		skipAuth?: boolean
+	): IBaseRoute {
+		return { operationId, path: "/api/test", requiresAuthorization, skipAuth };
 	}
 
 	function makeContextIds(userId?: string): IContextIds {
@@ -387,6 +391,21 @@ describe("AuthorizationRestProcessor (entity-storage backed)", () => {
 			await processor.pre(makeRequest(), response, makeRoute("secureAction"), makeContextIds(), {});
 
 			expect(response.statusCode).toBe(HttpStatusCode.unauthorized);
+		});
+
+		test("bypasses the check when skipAuth is true even with no userId in context", async () => {
+			await initialize({});
+
+			const response = makeResponse();
+			await processor.pre(
+				makeRequest(),
+				response,
+				makeRoute("systemAction", undefined, true),
+				makeContextIds(),
+				{}
+			);
+
+			expect(response.statusCode).toBe(HttpStatusCode.ok);
 		});
 	});
 });
