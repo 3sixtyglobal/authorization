@@ -101,7 +101,6 @@ export class AuthorizationRouteProcessor implements IBaseRouteProcessor {
 				) {
 					throw new UnauthorizedError(AuthorizationRouteProcessor.CLASS_NAME, "accessDenied");
 				}
-				response.statusCode = HttpStatusCode.ok;
 			} catch (err) {
 				HttpErrorHelper.buildResponse(
 					response,

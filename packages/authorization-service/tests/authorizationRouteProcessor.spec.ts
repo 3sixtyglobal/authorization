@@ -105,7 +105,7 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 
 	function makeRoute(
 		operationId: string,
-		requiresAuthorization?: boolean,
+		requiresAuthorization: boolean | undefined = true,
 		skipAuth?: boolean
 	): IBaseRoute {
 		return { operationId, path: "/api/test", requiresAuthorization, skipAuth };
@@ -139,7 +139,7 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 				{}
 			);
 
-			expect(response.statusCode).toBe(HttpStatusCode.ok);
+			expect(response.statusCode).toBeUndefined();
 		});
 
 		test("denies when the userId has no execute policy for the operationId", async () => {
@@ -176,7 +176,7 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 				{}
 			);
 
-			expect(response.statusCode).toBe(HttpStatusCode.ok);
+			expect(response.statusCode).toBeUndefined();
 		});
 
 		test("denies when the userId's assigned role has no policy for the operationId", async () => {
@@ -213,7 +213,7 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 				{}
 			);
 
-			expect(response.statusCode).toBe(HttpStatusCode.ok);
+			expect(response.statusCode).toBeUndefined();
 		});
 
 		test("denies when all of the userId's assigned roles lack a policy for the operationId", async () => {
@@ -253,7 +253,7 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 				makeContextIds("user-carol"),
 				{}
 			);
-			expect(readResponse.statusCode).toBe(HttpStatusCode.ok);
+			expect(readResponse.statusCode).toBeUndefined();
 
 			const writeResponse = makeResponse();
 			await processor.pre(
@@ -263,7 +263,7 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 				makeContextIds("user-carol"),
 				{}
 			);
-			expect(writeResponse.statusCode).toBe(HttpStatusCode.ok);
+			expect(writeResponse.statusCode).toBeUndefined();
 		});
 	});
 
@@ -285,7 +285,7 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 				{}
 			);
 
-			expect(response.statusCode).toBe(HttpStatusCode.ok);
+			expect(response.statusCode).toBeUndefined();
 		});
 
 		test("allows via a deep roleInheritance chain from the userId's assigned role", async () => {
@@ -308,7 +308,7 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 				{}
 			);
 
-			expect(response.statusCode).toBe(HttpStatusCode.ok);
+			expect(response.statusCode).toBeUndefined();
 		});
 
 		test("denies when no chain from the userId leads to a matching policy", async () => {
@@ -347,7 +347,7 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 				{}
 			);
 
-			expect(response.statusCode).toBe(HttpStatusCode.ok);
+			expect(response.statusCode).toBeUndefined();
 		});
 	});
 
