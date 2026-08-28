@@ -10,7 +10,6 @@ import {
 } from "@twin.org/authorization-connector-entity-storage";
 import { AuthorizationConnectorFactory } from "@twin.org/authorization-models";
 import { ContextIdKeys, ContextIdStore } from "@twin.org/context";
-import { SharedStore } from "@twin.org/core";
 import { MemoryEntityStorageConnector } from "@twin.org/entity-storage-connector-memory";
 import { EntityStorageConnectorFactory } from "@twin.org/entity-storage-models";
 import { nameof } from "@twin.org/nameof";
@@ -66,7 +65,6 @@ describe("AuthorizationService", () => {
 
 	afterEach(async () => {
 		vi.restoreAllMocks();
-		SharedStore.remove("migrationUserRoles");
 		AuthorizationConnectorFactory.unregister(TEST_NAMESPACE);
 		await policyStorage.teardown();
 		await roleStorage.teardown();
@@ -158,7 +156,7 @@ describe("AuthorizationService", () => {
 			expect(spy).toHaveBeenCalledTimes(2);
 		});
 
-		test("invalidation only affects the current tenant", async () => {
+		test("addPolicy invalidates only the current tenant cache for the subject", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");
 
@@ -181,6 +179,7 @@ describe("AuthorizationService", () => {
 				service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 
+			// Targeted invalidation: tenantA's alice entry evicted, tenantB's alice entry still cached
 			expect(spy).toHaveBeenCalledTimes(3);
 		});
 
@@ -196,7 +195,7 @@ describe("AuthorizationService", () => {
 			expect(spy).toHaveBeenCalledTimes(1);
 		});
 
-		test("addPolicy only invalidates the exact matching key", async () => {
+		test("addPolicy invalidates all cached check results for the subject", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");
 
@@ -206,12 +205,12 @@ describe("AuthorizationService", () => {
 			await service.addPolicy(TEST_MODEL_ID, "alice", "/data", "read");
 
 			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // invalidated — call 3
-			await service.check(TEST_MODEL_ID, "alice", "/data", "write"); // still cached
+			await service.check(TEST_MODEL_ID, "alice", "/data", "write"); // also invalidated — call 4
 
-			expect(spy).toHaveBeenCalledTimes(3);
+			expect(spy).toHaveBeenCalledTimes(4);
 		});
 
-		test("removePolicy only invalidates the exact matching key", async () => {
+		test("removePolicy invalidates all cached check results for the subject", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");
 
@@ -221,9 +220,9 @@ describe("AuthorizationService", () => {
 			await service.removePolicy(TEST_MODEL_ID, "alice", "/data", "read");
 
 			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // invalidated — call 3
-			await service.check(TEST_MODEL_ID, "alice", "/data", "write"); // still cached
+			await service.check(TEST_MODEL_ID, "alice", "/data", "write"); // also invalidated — call 4
 
-			expect(spy).toHaveBeenCalledTimes(3);
+			expect(spy).toHaveBeenCalledTimes(4);
 		});
 
 		test("addRoleForSubject invalidates all keys for the subject but not other subjects", async () => {
@@ -277,38 +276,103 @@ describe("AuthorizationService", () => {
 			expect(spy).toHaveBeenCalledTimes(5);
 		});
 
-		test("addRoleInheritance invalidates all keys for the role but not other subjects", async () => {
+		test("addPolicy invalidates cached results for subjects with the affected role but not unrelated subjects", async () => {
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "admin");
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");
 
-			await service.check(TEST_MODEL_ID, "editor", "/data", "read"); // call 1
-			await service.check(TEST_MODEL_ID, "editor", "/files", "write"); // call 2
-			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // call 3
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // call 1
+			await service.check(TEST_MODEL_ID, "bob", "/data", "read"); // call 2
+
+			await service.addPolicy(TEST_MODEL_ID, "admin", "/data", "read");
+
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // alice holds admin — invalidated — call 3
+			await service.check(TEST_MODEL_ID, "bob", "/data", "read"); // bob has no admin role — still cached
+
+			expect(spy).toHaveBeenCalledTimes(3);
+		});
+
+		test("removePolicy invalidates cached results for subjects with the affected role but not unrelated subjects", async () => {
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "admin");
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			const spy = vi.spyOn(connector, "check");
+
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // call 1
+			await service.check(TEST_MODEL_ID, "bob", "/data", "read"); // call 2
+
+			await service.removePolicy(TEST_MODEL_ID, "admin", "/data", "read");
+
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // alice holds admin — invalidated — call 3
+			await service.check(TEST_MODEL_ID, "bob", "/data", "read"); // bob has no admin role — still cached
+
+			expect(spy).toHaveBeenCalledTimes(3);
+		});
+
+		test("addPolicy invalidates cached results for transitive role holders", async () => {
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
+			await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			const spy = vi.spyOn(connector, "check");
+
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // call 1
+			await service.check(TEST_MODEL_ID, "bob", "/data", "read"); // call 2
+
+			await service.addPolicy(TEST_MODEL_ID, "viewer", "/data", "read");
+
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // alice holds editor→viewer — invalidated — call 3
+			await service.check(TEST_MODEL_ID, "bob", "/data", "read"); // bob unrelated — still cached
+
+			expect(spy).toHaveBeenCalledTimes(3);
+		});
+
+		test("addRoleInheritance invalidates cached results for subjects of the child role but not unrelated subjects", async () => {
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			const spy = vi.spyOn(connector, "check");
+
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // call 1
+			await service.check(TEST_MODEL_ID, "bob", "/data", "read"); // call 2
 
 			await service.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
 
-			await service.check(TEST_MODEL_ID, "editor", "/data", "read"); // invalidated — call 4
-			await service.check(TEST_MODEL_ID, "editor", "/files", "write"); // invalidated — call 5
-			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // still cached
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // alice holds editor — invalidated — call 3
+			await service.check(TEST_MODEL_ID, "bob", "/data", "read"); // bob unrelated — still cached
 
-			expect(spy).toHaveBeenCalledTimes(5);
+			expect(spy).toHaveBeenCalledTimes(3);
 		});
 
-		test("removeRoleInheritance invalidates all keys for the role but not other subjects", async () => {
+		test("removeRoleInheritance invalidates cached results for subjects of the child role but not unrelated subjects", async () => {
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
+			await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");
 
-			await service.check(TEST_MODEL_ID, "editor", "/data", "read"); // call 1
-			await service.check(TEST_MODEL_ID, "editor", "/files", "write"); // call 2
-			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // call 3
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // call 1
+			await service.check(TEST_MODEL_ID, "bob", "/data", "read"); // call 2
 
 			await service.removeRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
 
-			await service.check(TEST_MODEL_ID, "editor", "/data", "read"); // invalidated — call 4
-			await service.check(TEST_MODEL_ID, "editor", "/files", "write"); // invalidated — call 5
-			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // still cached
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // alice holds editor — invalidated — call 3
+			await service.check(TEST_MODEL_ID, "bob", "/data", "read"); // bob unrelated — still cached
 
-			expect(spy).toHaveBeenCalledTimes(5);
+			expect(spy).toHaveBeenCalledTimes(3);
+		});
+
+		test("removePolicy invalidates cached results for transitive role holders", async () => {
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
+			await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			const spy = vi.spyOn(connector, "check");
+
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // call 1
+			await service.check(TEST_MODEL_ID, "bob", "/data", "read"); // call 2
+
+			await service.removePolicy(TEST_MODEL_ID, "viewer", "/data", "read");
+
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read"); // alice holds editor→viewer — invalidated — call 3
+			await service.check(TEST_MODEL_ID, "bob", "/data", "read"); // bob unrelated — still cached
+
+			expect(spy).toHaveBeenCalledTimes(3);
 		});
 
 		test("role mutation invalidation is tenant-scoped", async () => {
@@ -339,15 +403,16 @@ describe("AuthorizationService", () => {
 			expect(spy).toHaveBeenCalledTimes(3);
 		});
 
-		test("inheritance mutation invalidation is tenant-scoped", async () => {
+		test("addRoleInheritance invalidates only the current tenant cache for subjects of the child role", async () => {
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");
 
 			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantA" }, async () =>
-				service.check(TEST_MODEL_ID, "editor", "/data", "read")
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantB" }, async () =>
-				service.check(TEST_MODEL_ID, "editor", "/data", "read")
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 			expect(spy).toHaveBeenCalledTimes(2);
 
@@ -357,13 +422,14 @@ describe("AuthorizationService", () => {
 
 			await ContextIdStore.run(
 				{ [ContextIdKeys.Tenant]: "tenantA" },
-				async () => service.check(TEST_MODEL_ID, "editor", "/data", "read") // tenantA invalidated
+				async () => service.check(TEST_MODEL_ID, "alice", "/data", "read") // tenantA invalidated
 			);
 			await ContextIdStore.run(
 				{ [ContextIdKeys.Tenant]: "tenantB" },
-				async () => service.check(TEST_MODEL_ID, "editor", "/data", "read") // tenantB still cached
+				async () => service.check(TEST_MODEL_ID, "alice", "/data", "read") // tenantB still cached
 			);
 
+			// Targeted invalidation: tenantA's alice entry evicted, tenantB's alice entry still cached
 			expect(spy).toHaveBeenCalledTimes(3);
 		});
 
@@ -377,6 +443,36 @@ describe("AuthorizationService", () => {
 			await service.removePolicy(TEST_MODEL_ID, "alice", "readData", "execute");
 
 			const after = await service.check(TEST_MODEL_ID, "alice", "readData", "execute");
+			expect(after).toBe(false);
+		});
+
+		test("removePolicy re-check reflects revoked transitive access", async () => {
+			await connector.addPolicy(TEST_MODEL_ID, "tenant:read", "tenantGet", "execute");
+			await connector.addRoleInheritance(TEST_MODEL_ID, "tenant-admin", "tenant:read");
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "tenant-admin");
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+
+			const before = await service.check(TEST_MODEL_ID, "alice", "tenantGet", "execute");
+			expect(before).toBe(true);
+
+			await service.removePolicy(TEST_MODEL_ID, "tenant:read", "tenantGet", "execute");
+
+			const after = await service.check(TEST_MODEL_ID, "alice", "tenantGet", "execute");
+			expect(after).toBe(false);
+		});
+
+		test("removeRoleInheritance re-check reflects revoked transitive access", async () => {
+			await connector.addPolicy(TEST_MODEL_ID, "tenant:read", "tenantGet", "execute");
+			await connector.addRoleInheritance(TEST_MODEL_ID, "tenant-admin", "tenant:read");
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "tenant-admin");
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+
+			const before = await service.check(TEST_MODEL_ID, "alice", "tenantGet", "execute");
+			expect(before).toBe(true);
+
+			await service.removeRoleInheritance(TEST_MODEL_ID, "tenant-admin", "tenant:read");
+
+			const after = await service.check(TEST_MODEL_ID, "alice", "tenantGet", "execute");
 			expect(after).toBe(false);
 		});
 
@@ -407,71 +503,6 @@ describe("AuthorizationService", () => {
 
 			await service.check(TEST_MODEL_ID, "alice", "readData", "execute");
 			expect(spy).toHaveBeenCalledTimes(2);
-		});
-	});
-
-	describe("start", () => {
-		test("populates roles from migrationUserRoles and removes the SharedStore entry", async () => {
-			SharedStore.set<{ identity: string; roles: string[]; contextIds: undefined }[]>(
-				"migrationUserRoles",
-				[
-					{ identity: "user1", roles: ["admin", "editor"], contextIds: undefined },
-					{ identity: "user2", roles: ["viewer"], contextIds: undefined }
-				]
-			);
-			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
-
-			await service.start();
-
-			const user1Roles = await connector.getRolesForSubject("rest", "user1");
-			const user2Roles = await connector.getRolesForSubject("rest", "user2");
-			expect(user1Roles).toEqual(expect.arrayContaining(["admin", "editor"]));
-			expect(user1Roles).toHaveLength(2);
-			expect(user2Roles).toEqual(["viewer"]);
-			expect(SharedStore.get("migrationUserRoles")).toBeUndefined();
-		});
-
-		test("populates roles within the correct tenant context when contextIds are provided", async () => {
-			SharedStore.set<{ identity: string; roles: string[]; contextIds: { tenant: string } }[]>(
-				"migrationUserRoles",
-				[
-					{
-						identity: "user1",
-						roles: ["admin"],
-						contextIds: { [ContextIdKeys.Tenant]: "tenantA" }
-					},
-					{
-						identity: "user2",
-						roles: ["viewer"],
-						contextIds: { [ContextIdKeys.Tenant]: "tenantB" }
-					}
-				]
-			);
-
-			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
-			await service.start();
-
-			const user1RolesInA = await ContextIdStore.run(
-				{ [ContextIdKeys.Tenant]: "tenantA" },
-				async () => connector.getRolesForSubject("rest", "user1")
-			);
-			const user2RolesInB = await ContextIdStore.run(
-				{ [ContextIdKeys.Tenant]: "tenantB" },
-				async () => connector.getRolesForSubject("rest", "user2")
-			);
-
-			expect(user1RolesInA).toEqual(["admin"]);
-			expect(user2RolesInB).toEqual(["viewer"]);
-			expect(SharedStore.get("migrationUserRoles")).toBeUndefined();
-		});
-
-		test("does not assign any roles when migrationUserRoles is absent", async () => {
-			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
-			const spy = vi.spyOn(connector, "addRoleForSubject");
-
-			await service.start();
-
-			expect(spy).not.toHaveBeenCalled();
 		});
 	});
 
@@ -507,6 +538,72 @@ describe("AuthorizationService", () => {
 			const spy = vi.spyOn(connector, "hasRoles");
 			await service.hasRoles(TEST_MODEL_ID, ["admin"]);
 			expect(spy).toHaveBeenCalledWith(TEST_MODEL_ID, ["admin"]);
+		});
+	});
+
+	describe("addRoleForSubject privilege escalation", () => {
+		test("allows granting a role when no userId is in context", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await ContextIdStore.run({}, async () => {
+				await expect(
+					service.addRoleForSubject(TEST_MODEL_ID, "user-bob", "editor")
+				).resolves.toBeUndefined();
+			});
+		});
+
+		test("allows caller to grant a role they directly hold", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+				await expect(
+					service.addRoleForSubject(TEST_MODEL_ID, "user-bob", "editor")
+				).resolves.toBeUndefined();
+			});
+		});
+
+		test("allows caller to grant a role they do not hold", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+				await expect(
+					service.addRoleForSubject(TEST_MODEL_ID, "user-bob", "devops")
+				).resolves.toBeUndefined();
+			});
+		});
+
+		test("denies caller granting a direct parent role of their own role", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
+			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+				await expect(
+					service.addRoleForSubject(TEST_MODEL_ID, "user-bob", "viewer")
+				).rejects.toThrow();
+			});
+		});
+
+		test("denies caller granting a transitive ancestor role", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
+			await connector.addRoleInheritance(TEST_MODEL_ID, "viewer", "reader");
+			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+				await expect(
+					service.addRoleForSubject(TEST_MODEL_ID, "user-bob", "reader")
+				).rejects.toThrow();
+			});
+		});
+
+		test("allows caller with multiple roles to grant a role that is not an ancestor of any", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
+			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
+			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "auditor");
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+				await expect(
+					service.addRoleForSubject(TEST_MODEL_ID, "user-bob", "devops")
+				).resolves.toBeUndefined();
+			});
 		});
 	});
 });

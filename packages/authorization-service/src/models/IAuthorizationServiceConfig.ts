@@ -11,12 +11,6 @@ export interface IAuthorizationServiceConfig {
 	defaultNamespace?: string;
 
 	/**
-	 * The model identifier to use when migrating old authorization data.
-	 * @default rest.
-	 */
-	migrationModelId?: string;
-
-	/**
 	 * Maximum number of check results to hold in the cache
 	 * @default 1000.
 	 */

@@ -171,7 +171,7 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * @returns Nothing.
 	 */
 	public async build(modelId: string, model: IAuthorizationModel): Promise<void> {
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(modelId), modelId);
 
 		try {
 			for (const policy of model.policies ?? []) {
@@ -209,10 +209,10 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		object: string,
 		action: string
 	): Promise<boolean> {
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(object), object);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(action), action);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
+		this.guardNoSeparator(nameof(object), object);
+		this.guardNoSeparator(nameof(action), action);
 
 		try {
 			const allRules = await this.getAllRawPolicies(modelId);
@@ -269,10 +269,10 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		object: string,
 		action: string
 	): Promise<void> {
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(object), object);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(action), action);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
+		this.guardNoSeparator(nameof(object), object);
+		this.guardNoSeparator(nameof(action), action);
 
 		try {
 			await this.ensureEnforcer(modelId);
@@ -317,10 +317,10 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		object: string,
 		action: string
 	): Promise<void> {
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(object), object);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(action), action);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
+		this.guardNoSeparator(nameof(object), object);
+		this.guardNoSeparator(nameof(action), action);
 
 		try {
 			const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
@@ -364,8 +364,8 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		cursor?: string,
 		limit?: number
 	): Promise<{ entities: IAuthorizationPolicy[]; cursor?: string }> {
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
 
 		return this.getAllPolicies(modelId, subject, cursor, limit);
 	}
@@ -385,7 +385,10 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		cursor?: string,
 		limit?: number
 	): Promise<{ entities: IAuthorizationPolicy[]; cursor?: string }> {
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		if (subject !== undefined) {
+			this.guardNoSeparator(nameof(subject), subject);
+		}
 
 		try {
 			const rules = await this.getAllRawPolicies(modelId);
@@ -435,7 +438,7 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		cursor?: string,
 		limit?: number
 	): Promise<{ roles: string[]; cursor?: string }> {
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(modelId), modelId);
 
 		try {
 			const rules = await this.getAllRawPolicies(modelId);
@@ -483,8 +486,11 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * @throws GeneralError if the query fails.
 	 */
 	public async hasRoles(modelId: string, roles: string[]): Promise<boolean[]> {
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(modelId), modelId);
 		Guards.array<string>(CasbinAuthorizationConnector.CLASS_NAME, nameof(roles), roles);
+		for (const role of roles) {
+			this.guardNoSeparator(nameof(role), role);
+		}
 
 		try {
 			const rules = await this.getAllRawPolicies(modelId);
@@ -520,9 +526,9 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * @throws GeneralError if the request fails.
 	 */
 	public async addRoleForSubject(modelId: string, subject: string, role: string): Promise<void> {
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
+		this.guardNoSeparator(nameof(role), role);
 
 		try {
 			await this.ensureEnforcer(modelId);
@@ -561,9 +567,9 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * @throws GeneralError if the request fails.
 	 */
 	public async removeRoleForSubject(modelId: string, subject: string, role: string): Promise<void> {
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
+		this.guardNoSeparator(nameof(role), role);
 
 		try {
 			const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
@@ -600,8 +606,8 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * @throws GeneralError if the request fails.
 	 */
 	public async removeAllRolesForSubject(modelId: string, subject: string): Promise<void> {
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
 
 		try {
 			const rules = await this.getAllRawPolicies(modelId);
@@ -630,8 +636,8 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * @throws GeneralError if the query fails.
 	 */
 	public async getRolesForSubject(modelId: string, subject: string): Promise<string[]> {
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
 
 		try {
 			const rules = await this.getAllRawPolicies(modelId);
@@ -657,8 +663,8 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * @throws GeneralError if the query fails.
 	 */
 	public async getSubjectsForRole(modelId: string, role: string): Promise<string[]> {
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(role), role);
 
 		try {
 			const rules = await this.getAllRawPolicies(modelId);
@@ -685,9 +691,9 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * @throws GeneralError if the request fails.
 	 */
 	public async hasRoleForSubject(modelId: string, subject: string, role: string): Promise<boolean> {
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
+		this.guardNoSeparator(nameof(role), role);
 
 		try {
 			const rules = await this.getAllRawPolicies(modelId);
@@ -718,9 +724,9 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		role: string,
 		inheritsFrom: string
 	): Promise<void> {
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(inheritsFrom), inheritsFrom);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(role), role);
+		this.guardNoSeparator(nameof(inheritsFrom), inheritsFrom);
 
 		try {
 			await this.ensureEnforcer(modelId);
@@ -763,9 +769,9 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		role: string,
 		inheritsFrom: string
 	): Promise<void> {
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(inheritsFrom), inheritsFrom);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(role), role);
+		this.guardNoSeparator(nameof(inheritsFrom), inheritsFrom);
 
 		try {
 			const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
@@ -802,8 +808,8 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * @throws GeneralError if the query fails.
 	 */
 	public async getParentRoles(modelId: string, role: string): Promise<string[]> {
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(role), role);
 
 		try {
 			const rules = await this.getAllRawPolicies(modelId);
@@ -829,8 +835,8 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * @throws GeneralError if the query fails.
 	 */
 	public async getChildRoles(modelId: string, role: string): Promise<string[]> {
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, nameof(role), role);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(role), role);
 
 		try {
 			const rules = await this.getAllRawPolicies(modelId);
@@ -958,7 +964,6 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 
 	/**
 	 * Fetch all raw policy rules from the Casdoor enforcer for the given model.
-	 * Returns an empty array when the enforcer does not yet exist.
 	 * @param modelId The model identifier.
 	 * @returns All rules (both "p" permission and "g" grouping types).
 	 * @internal
@@ -978,9 +983,7 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 			this._requestOptions
 		);
 
-		if (response.status !== "ok") {
-			return [];
-		}
+		this.assertOk(response, "getAllPoliciesFailed");
 		return response.data ?? [];
 	}
 
@@ -1001,6 +1004,22 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 			throw new GeneralError(CasbinAuthorizationConnector.CLASS_NAME, errorKey, {
 				...properties,
 				serverMsg: response.msg
+			});
+		}
+	}
+
+	/**
+	 * Throw a GeneralError if the value contains the pipe separator character.
+	 * @param fieldName The field name for the error context.
+	 * @param value The value to validate.
+	 * @throws GeneralError If the value contains a pipe character.
+	 * @internal
+	 */
+	private guardNoSeparator(fieldName: string, value: string): void {
+		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, fieldName, value);
+		if (value.includes("|")) {
+			throw new GeneralError(CasbinAuthorizationConnector.CLASS_NAME, "containsSeparator", {
+				fieldName
 			});
 		}
 	}

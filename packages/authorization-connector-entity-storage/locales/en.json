@@ -18,7 +18,8 @@
 			"removeRoleInheritanceFailed": "Failed to remove inheritance from role \"{inheritsFrom}\" from role \"{role}\".",
 			"getParentRolesFailed": "Failed to retrieve parent roles for role \"{role}\".",
 			"getChildRolesFailed": "Failed to retrieve child roles for role \"{role}\".",
-			"buildFailed": "Failed to build the authorization model."
+			"buildFailed": "Failed to build the authorization model.",
+			"containsSeparator": "The value for \"{fieldName}\" must not contain the \"|\" separator character."
 		}
 	}
 }

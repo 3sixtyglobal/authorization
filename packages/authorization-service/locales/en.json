@@ -1,4 +1,16 @@
 {
+	"info": {
+		"authorizationService": {
+			"modelBuilt": "Authorization model built for model \"{modelId}\".",
+			"policyAdded": "Policy added for subject \"{subject}\" on \"{object}\" with action \"{action}\".",
+			"policyRemoved": "Policy removed for subject \"{subject}\" on \"{object}\" with action \"{action}\".",
+			"roleAssigned": "Role \"{role}\" assigned to subject \"{subject}\".",
+			"roleRemoved": "Role \"{role}\" removed from subject \"{subject}\".",
+			"allRolesRemoved": "All roles removed from subject \"{subject}\".",
+			"inheritanceAdded": "Role \"{role}\" now inherits from \"{inheritsFrom}\".",
+			"inheritanceRemoved": "Role \"{role}\" no longer inherits from \"{inheritsFrom}\"."
+		}
+	},
 	"error": {
 		"authorizationService": {
 			"noConnectors": "There are no connectors registered with the authorization factory",
@@ -19,9 +31,11 @@
 			"removeRoleInheritanceFailed": "The removal of the role inheritance failed",
 			"getParentRolesFailed": "The retrieval of parent roles failed",
 			"getChildRolesFailed": "The retrieval of child roles failed",
-			"buildFailed": "The build of the authorization model failed"
+			"buildFailed": "The build of the authorization model failed",
+			"containsSeparator": "The field \"{fieldName}\" must not contain the \"|\" separator character.",
+			"roleEscalationDenied": "You cannot grant a role that sits at a higher level in the role hierarchy than your own roles."
 		},
-		"authorizationRestProcessor": {
+		"authorizationRouteProcessor": {
 			"routeIdMissing": "The route ID is missing",
 			"accessDenied": "Access denied for the user to the route"
 		}

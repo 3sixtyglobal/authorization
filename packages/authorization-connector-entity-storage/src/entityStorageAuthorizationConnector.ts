@@ -90,7 +90,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	 * @returns Nothing.
 	 */
 	public async build(modelId: string, model: IAuthorizationModel): Promise<void> {
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(modelId), modelId);
 
 		try {
 			for (const policy of model.policies ?? []) {
@@ -127,10 +127,10 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		object: string,
 		action: string
 	): Promise<boolean> {
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(object), object);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(action), action);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
+		this.guardNoSeparator(nameof(object), object);
+		this.guardNoSeparator(nameof(action), action);
 
 		try {
 			const directPolicy = await this._authorizationPolicyEntityStorage.get(
@@ -217,10 +217,10 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		object: string,
 		action: string
 	): Promise<void> {
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(object), object);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(action), action);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
+		this.guardNoSeparator(nameof(object), object);
+		this.guardNoSeparator(nameof(action), action);
 
 		try {
 			const entity = new AuthorizationPolicy();
@@ -258,10 +258,10 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		object: string,
 		action: string
 	): Promise<void> {
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(object), object);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(action), action);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
+		this.guardNoSeparator(nameof(object), object);
+		this.guardNoSeparator(nameof(action), action);
 
 		try {
 			await this._authorizationPolicyEntityStorage.remove(
@@ -295,8 +295,8 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		cursor?: string,
 		limit?: number
 	): Promise<{ entities: IAuthorizationPolicy[]; cursor?: string }> {
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
 
 		try {
 			return await this.getAllPolicies(modelId, subject, cursor, limit);
@@ -328,7 +328,10 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		cursor?: string,
 		limit?: number
 	): Promise<{ entities: IAuthorizationPolicy[]; cursor?: string }> {
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		if (subject !== undefined) {
+			this.guardNoSeparator(nameof(subject), subject);
+		}
 
 		try {
 			const result = await this._authorizationPolicyEntityStorage.query(
@@ -380,7 +383,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		cursor?: string,
 		limit?: number
 	): Promise<{ roles: string[]; cursor?: string }> {
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(modelId), modelId);
 
 		try {
 			const result = await this._authorizationRoleNameEntityStorage.query(
@@ -415,8 +418,11 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	 * @throws GeneralError if the query fails.
 	 */
 	public async hasRoles(modelId: string, roles: string[]): Promise<boolean[]> {
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(modelId), modelId);
 		Guards.array<string>(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(roles), roles);
+		for (const role of roles) {
+			this.guardNoSeparator(nameof(role), role);
+		}
 
 		try {
 			return await Promise.all(
@@ -449,9 +455,9 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	 * @throws GeneralError if the request fails.
 	 */
 	public async addRoleForSubject(modelId: string, subject: string, role: string): Promise<void> {
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(role), role);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
+		this.guardNoSeparator(nameof(role), role);
 
 		try {
 			const assignment = new AuthorizationRoleAssignment();
@@ -489,9 +495,9 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	 * @throws GeneralError if the request fails.
 	 */
 	public async removeRoleForSubject(modelId: string, subject: string, role: string): Promise<void> {
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(role), role);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
+		this.guardNoSeparator(nameof(role), role);
 
 		try {
 			await this._authorizationRoleAssignmentEntityStorage.remove(
@@ -519,8 +525,8 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	 * @throws GeneralError if the request fails.
 	 */
 	public async removeAllRolesForSubject(modelId: string, subject: string): Promise<void> {
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
 
 		try {
 			const result = await this._authorizationRoleAssignmentEntityStorage.query(
@@ -561,8 +567,8 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	 * @throws GeneralError if the query fails.
 	 */
 	public async getRolesForSubject(modelId: string, subject: string): Promise<string[]> {
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
 
 		try {
 			const result = await this._authorizationRoleAssignmentEntityStorage.query(
@@ -598,8 +604,8 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	 * @throws GeneralError if the query fails.
 	 */
 	public async getSubjectsForRole(modelId: string, role: string): Promise<string[]> {
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(role), role);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(role), role);
 
 		try {
 			const result = await this._authorizationRoleAssignmentEntityStorage.query(
@@ -636,9 +642,9 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	 * @throws GeneralError if the request fails.
 	 */
 	public async hasRoleForSubject(modelId: string, subject: string, role: string): Promise<boolean> {
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(subject), subject);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(role), role);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
+		this.guardNoSeparator(nameof(role), role);
 
 		try {
 			const entity = await this._authorizationRoleAssignmentEntityStorage.get(
@@ -671,13 +677,9 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		role: string,
 		inheritsFrom: string
 	): Promise<void> {
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(role), role);
-		Guards.stringValue(
-			EntityStorageAuthorizationConnector.CLASS_NAME,
-			nameof(inheritsFrom),
-			inheritsFrom
-		);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(role), role);
+		this.guardNoSeparator(nameof(inheritsFrom), inheritsFrom);
 
 		try {
 			const inheritance = new AuthorizationRoleInheritance();
@@ -724,13 +726,9 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		role: string,
 		inheritsFrom: string
 	): Promise<void> {
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(role), role);
-		Guards.stringValue(
-			EntityStorageAuthorizationConnector.CLASS_NAME,
-			nameof(inheritsFrom),
-			inheritsFrom
-		);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(role), role);
+		this.guardNoSeparator(nameof(inheritsFrom), inheritsFrom);
 
 		try {
 			await this._authorizationRoleInheritanceEntityStorage.remove(
@@ -761,8 +759,8 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	 * @throws GeneralError if the query fails.
 	 */
 	public async getParentRoles(modelId: string, role: string): Promise<string[]> {
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(role), role);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(role), role);
 
 		try {
 			const result = await this._authorizationRoleInheritanceEntityStorage.query(
@@ -798,8 +796,8 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	 * @throws GeneralError if the query fails.
 	 */
 	public async getChildRoles(modelId: string, role: string): Promise<string[]> {
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, nameof(role), role);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(role), role);
 
 		try {
 			const result = await this._authorizationRoleInheritanceEntityStorage.query(
@@ -873,6 +871,22 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	 */
 	private roleNameId(modelId: string, name: string): string {
 		return `${modelId}|${name}`;
+	}
+
+	/**
+	 * Throw if the given value contains the compound-key separator.
+	 * @param fieldName The field name used in the error message.
+	 * @param value The value to validate.
+	 * @throws GeneralError if the value contains the "|" separator character.
+	 * @internal
+	 */
+	private guardNoSeparator(fieldName: string, value: string): void {
+		Guards.stringValue(EntityStorageAuthorizationConnector.CLASS_NAME, fieldName, value);
+		if (value.includes("|")) {
+			throw new GeneralError(EntityStorageAuthorizationConnector.CLASS_NAME, "containsSeparator", {
+				fieldName
+			});
+		}
 	}
 
 	/**

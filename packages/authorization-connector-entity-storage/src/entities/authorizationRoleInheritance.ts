@@ -22,12 +22,12 @@ export class AuthorizationRoleInheritance {
 	/**
 	 * The child role that inherits permissions from the parent.
 	 */
-	@property({ type: "string" })
+	@property({ type: "string", isSecondary: true })
 	public role!: string;
 
 	/**
 	 * The parent role whose permissions are inherited.
 	 */
-	@property({ type: "string" })
+	@property({ type: "string", isSecondary: true })
 	public inheritsFrom!: string;
 }

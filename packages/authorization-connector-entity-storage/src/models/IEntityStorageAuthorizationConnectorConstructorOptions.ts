@@ -1,16 +1,10 @@
 // Copyright 2026 IOTA Stiftung.
 // SPDX-License-Identifier: Apache-2.0.
-import type { IEntityStorageAuthorizationConnectorConfig } from "./IEntityStorageAuthorizationConnectorConfig.js";
 
 /**
  * Options for the entity storage authorization connector constructor.
  */
 export interface IEntityStorageAuthorizationConnectorConstructorOptions {
-	/**
-	 * The component type for the optional logging.
-	 */
-	loggingComponentType?: string;
-
 	/**
 	 * The entity storage type for authorization policies.
 	 * @default "authorization-policy"
@@ -34,9 +28,4 @@ export interface IEntityStorageAuthorizationConnectorConstructorOptions {
 	 * @default "authorization-role-name"
 	 */
 	authorizationRoleNameEntityStorageType?: string;
-
-	/**
-	 * The configuration for the service.
-	 */
-	config?: IEntityStorageAuthorizationConnectorConfig;
 }

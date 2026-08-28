@@ -22,12 +22,12 @@ export class AuthorizationRoleAssignment {
 	/**
 	 * The subject (user or service) the role is assigned to.
 	 */
-	@property({ type: "string" })
+	@property({ type: "string", isSecondary: true })
 	public subject!: string;
 
 	/**
 	 * The role assigned to the subject.
 	 */
-	@property({ type: "string" })
+	@property({ type: "string", isSecondary: true })
 	public role!: string;
 }

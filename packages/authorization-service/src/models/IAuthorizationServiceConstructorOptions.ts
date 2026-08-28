@@ -7,6 +7,11 @@ import type { IAuthorizationServiceConfig } from "./IAuthorizationServiceConfig.
  */
 export interface IAuthorizationServiceConstructorOptions {
 	/**
+	 * The component type for the optional logging component.
+	 */
+	loggingComponentType?: string;
+
+	/**
 	 * The component type for the optional telemetry component used for event metrics.
 	 */
 	telemetryComponentType?: string;

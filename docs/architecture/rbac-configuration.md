@@ -107,15 +107,7 @@ To verify whether a user can execute a specific operation, call `check` with the
 const allowed = await authorizationComponent.check('rest', userId, operationId, 'execute');
 ```
 
-`check` returns `true` if the user holds any role that transitively grants the required permission, and `false` otherwise.
-
-Because the inheritance graph is traversed recursively, `check` works correctly regardless of which node in the hierarchy the `object` resolves to. You can check against any node in the graph, from a high-level role name down to a specific leaf permission, and the result is consistent with the full traversal from the subject.
-
-**Checking a leaf node (specific permission):** the policy `addPolicy('rest', 'tenant:read', 'tenantGet', 'execute')` records that the `tenant:read` permission grants `tenantGet`. When a user assigned `tenant-admin` calls `check('rest', userId, 'tenantGet', 'execute')`, the system walks the inheritance graph outward from the subject until it finds a node that holds a direct policy for `tenantGet`. It finds it via `tenant-admin` → `tenant:write` → `tenant:read`.
-
-**Checking an entry node (role or permission name):** because permissions are nodes in the same graph, you can also check at a higher level. `check('rest', userId, 'tenant:read', 'execute')` asks whether the user holds anything that grants the `tenant:read` permission itself. A subject assigned `tenant-admin` passes because the inheritance chain reaches `tenant:read` directly. This lets you guard coarser-grained gates, such as confirming a user holds any tenant management capability before loading a shared resource.
-
-In practice the `AuthorizationProcessor` always checks at the leaf level by using the route's `operationId` as the object. Application code that needs a broader gate can check at any node by supplying a role or permission name instead.
+`check` returns `true` if the user holds any role that transitively grants the required permission, and `false` otherwise. The object must be a leaf-level permission name (such as a route's `operationId`); checking against a role or intermediate permission name is not supported and always returns `false`.
 
 ### Access matrix
 

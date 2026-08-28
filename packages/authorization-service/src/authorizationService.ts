@@ -9,8 +9,16 @@ import {
 	type IAuthorizationModel,
 	type IAuthorizationPolicy
 } from "@twin.org/authorization-models";
-import { ContextIdKeys, ContextIdStore, type IContextIds } from "@twin.org/context";
-import { ComponentFactory, GeneralError, Guards, Is, LfuCache, SharedStore } from "@twin.org/core";
+import { ContextIdKeys, ContextIdStore } from "@twin.org/context";
+import {
+	ComponentFactory,
+	GeneralError,
+	Guards,
+	Is,
+	LfuCache,
+	UnauthorizedError
+} from "@twin.org/core";
+import type { ILoggingComponent } from "@twin.org/logging-models";
 import { nameof } from "@twin.org/nameof";
 import { MetricHelper, type ITelemetryComponent } from "@twin.org/telemetry-models";
 import type { IAuthorizationServiceConstructorOptions } from "./models/IAuthorizationServiceConstructorOptions.js";
@@ -31,10 +39,10 @@ export class AuthorizationService implements IAuthorizationComponent {
 	private readonly _defaultNamespace: string;
 
 	/**
-	 * The model identifier to use when migrating old authorization data.
+	 * The optional logging component.
 	 * @internal
 	 */
-	private readonly _migrationModelId: string;
+	private readonly _loggingComponent?: ILoggingComponent;
 
 	/**
 	 * The optional telemetry component for recording metrics.
@@ -49,10 +57,11 @@ export class AuthorizationService implements IAuthorizationComponent {
 	private readonly _checkCacheConfig: { capacity?: number; ttiMs: number };
 
 	/**
-	 * Per-model LFU caches for check() results, keyed by model identifier.
+	 * Per-tenant, per-model LFU caches for check() results.
+	 * Outer key: tenant identifier ("root" when no tenant is set). Inner key: model identifier.
 	 * @internal
 	 */
-	private readonly _checkCache: Map<string, LfuCache<boolean>>;
+	private readonly _checkCache: Map<string, Map<string, LfuCache<boolean>>>;
 
 	/**
 	 * Create a new instance of AuthorizationService.
@@ -65,18 +74,20 @@ export class AuthorizationService implements IAuthorizationComponent {
 			throw new GeneralError(AuthorizationService.CLASS_NAME, "noConnectors");
 		}
 
+		this._loggingComponent = ComponentFactory.getIfExists<ILoggingComponent>(
+			options?.loggingComponentType
+		);
 		this._telemetryComponent = ComponentFactory.getIfExists<ITelemetryComponent>(
 			options?.telemetryComponentType
 		);
 
 		this._defaultNamespace = options?.config?.defaultNamespace ?? names[0];
-		this._migrationModelId = options?.config?.migrationModelId ?? "rest";
 
 		this._checkCacheConfig = {
 			capacity: options?.config?.checkCacheCapacity,
 			ttiMs: options?.config?.checkCacheTtiMs ?? 60000
 		};
-		this._checkCache = new Map<string, LfuCache<boolean>>();
+		this._checkCache = new Map<string, Map<string, LfuCache<boolean>>>();
 	}
 
 	/**
@@ -91,24 +102,6 @@ export class AuthorizationService implements IAuthorizationComponent {
 	 * Start the service, applying default rules and registering telemetry metrics.
 	 */
 	public async start(): Promise<void> {
-		// If a migration of the roles from the old authenticated users has just happened
-		// the old roles will be stored in the SharedStore, if they exist then we need
-		// to populate them in the authorization service.
-		const migratedRoles =
-			SharedStore.get<{ identity: string; roles: string[]; contextIds: IContextIds | undefined }[]>(
-				"migrationUserRoles"
-			) ?? [];
-		if (Is.arrayValue(migratedRoles)) {
-			for (const entry of migratedRoles) {
-				await ContextIdStore.run(entry.contextIds ?? {}, async () => {
-					for (const role of entry.roles) {
-						await this.addRoleForSubject(this._migrationModelId, entry.identity, role);
-					}
-				});
-			}
-			SharedStore.remove("migrationUserRoles");
-		}
-
 		if (Is.undefined(this._telemetryComponent)) {
 			return;
 		}
@@ -122,12 +115,19 @@ export class AuthorizationService implements IAuthorizationComponent {
 	 * @returns Nothing.
 	 */
 	public async build(modelId: string, model: IAuthorizationModel): Promise<void> {
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(modelId), modelId);
 
 		try {
 			const connector = this.getConnector();
 			await connector.build(modelId, model);
 			this.invalidateCacheForModel(modelId);
+			await this._loggingComponent?.log({
+				level: "info",
+				source: AuthorizationService.CLASS_NAME,
+				ts: Date.now(),
+				message: "modelBuilt",
+				data: { modelId }
+			});
 		} catch (error) {
 			throw new GeneralError(AuthorizationService.CLASS_NAME, "buildFailed", undefined, error);
 		}
@@ -147,15 +147,17 @@ export class AuthorizationService implements IAuthorizationComponent {
 		object: string,
 		action: string
 	): Promise<boolean> {
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(subject), subject);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(object), object);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(action), action);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
+		this.guardNoSeparator(nameof(object), object);
+		this.guardNoSeparator(nameof(action), action);
 
 		try {
 			const connector = this.getConnector();
-			const key = await this.buildCacheKey(subject, object, action);
-			return await this.getModelCache(modelId).getOrSet(key, async () =>
+			const contextIds = await ContextIdStore.getContextIds();
+			const tenantId = contextIds?.[ContextIdKeys.Tenant] ?? "root";
+			const key = this.buildCacheKey(subject, object, action);
+			return await this.getTenantCache(modelId, tenantId).getOrSet(key, async () =>
 				connector.check(modelId, subject, object, action)
 			);
 		} catch (error) {
@@ -177,15 +179,22 @@ export class AuthorizationService implements IAuthorizationComponent {
 		object: string,
 		action: string
 	): Promise<void> {
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(subject), subject);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(object), object);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(action), action);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
+		this.guardNoSeparator(nameof(object), object);
+		this.guardNoSeparator(nameof(action), action);
 
 		try {
 			const connector = this.getConnector();
 			await connector.addPolicy(modelId, subject, object, action);
-			await this.deleteExactCacheKey(modelId, subject, object, action);
+			await this.invalidateCacheForRoleSubjects(modelId, subject);
+			await this._loggingComponent?.log({
+				level: "info",
+				source: AuthorizationService.CLASS_NAME,
+				ts: Date.now(),
+				message: "policyAdded",
+				data: { modelId, subject, object, action }
+			});
 
 			await MetricHelper.metricIncrement(
 				this._telemetryComponent,
@@ -210,15 +219,22 @@ export class AuthorizationService implements IAuthorizationComponent {
 		object: string,
 		action: string
 	): Promise<void> {
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(subject), subject);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(object), object);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(action), action);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
+		this.guardNoSeparator(nameof(object), object);
+		this.guardNoSeparator(nameof(action), action);
 
 		try {
 			const connector = this.getConnector();
 			await connector.removePolicy(modelId, subject, object, action);
-			await this.deleteExactCacheKey(modelId, subject, object, action);
+			await this.invalidateCacheForRoleSubjects(modelId, subject);
+			await this._loggingComponent?.log({
+				level: "info",
+				source: AuthorizationService.CLASS_NAME,
+				ts: Date.now(),
+				message: "policyRemoved",
+				data: { modelId, subject, object, action }
+			});
 
 			await MetricHelper.metricIncrement(
 				this._telemetryComponent,
@@ -248,8 +264,8 @@ export class AuthorizationService implements IAuthorizationComponent {
 		cursor?: string,
 		limit?: number
 	): Promise<{ entities: IAuthorizationPolicy[]; cursor?: string }> {
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(subject), subject);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
 
 		try {
 			const connector = this.getConnector();
@@ -278,7 +294,10 @@ export class AuthorizationService implements IAuthorizationComponent {
 		cursor?: string,
 		limit?: number
 	): Promise<{ entities: IAuthorizationPolicy[]; cursor?: string }> {
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		if (subject !== undefined) {
+			this.guardNoSeparator(nameof(subject), subject);
+		}
 
 		try {
 			const connector = this.getConnector();
@@ -305,7 +324,7 @@ export class AuthorizationService implements IAuthorizationComponent {
 		cursor?: string,
 		limit?: number
 	): Promise<{ roles: string[]; cursor?: string }> {
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(modelId), modelId);
 
 		try {
 			const connector = this.getConnector();
@@ -327,8 +346,11 @@ export class AuthorizationService implements IAuthorizationComponent {
 	 * @returns An array of booleans in the same order as the input.
 	 */
 	public async hasRoles(modelId: string, roles: string[]): Promise<boolean[]> {
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(modelId), modelId);
 		Guards.array<string>(AuthorizationService.CLASS_NAME, nameof(roles), roles);
+		for (const role of roles) {
+			this.guardNoSeparator(nameof(role), role);
+		}
 
 		try {
 			const connector = this.getConnector();
@@ -346,14 +368,47 @@ export class AuthorizationService implements IAuthorizationComponent {
 	 * @returns Nothing.
 	 */
 	public async addRoleForSubject(modelId: string, subject: string, role: string): Promise<void> {
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(subject), subject);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(role), role);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
+		this.guardNoSeparator(nameof(role), role);
+
+		const contextIds = await ContextIdStore.getContextIds();
+		const callerId = contextIds?.[ContextIdKeys.User];
+		const connector = this.getConnector();
+
+		if (Is.stringValue(callerId)) {
+			const callerRoles = await connector.getRolesForSubject(modelId, callerId);
+			const forbidden = new Set<string>();
+			const visited = new Set<string>(callerRoles);
+			const queue = [...callerRoles];
+			while (queue.length > 0) {
+				const current = queue.shift();
+				if (!Is.empty(current)) {
+					const parents = await connector.getParentRoles(modelId, current);
+					for (const parent of parents) {
+						if (!visited.has(parent)) {
+							visited.add(parent);
+							forbidden.add(parent);
+							queue.push(parent);
+						}
+					}
+				}
+			}
+			if (forbidden.has(role)) {
+				throw new UnauthorizedError(AuthorizationService.CLASS_NAME, "roleEscalationDenied");
+			}
+		}
 
 		try {
-			const connector = this.getConnector();
 			await connector.addRoleForSubject(modelId, subject, role);
-			await this.invalidateCacheByPrefix(modelId, subject);
+			await this.invalidateModelCacheByPrefix(modelId, subject);
+			await this._loggingComponent?.log({
+				level: "info",
+				source: AuthorizationService.CLASS_NAME,
+				ts: Date.now(),
+				message: "roleAssigned",
+				data: { modelId, subject, role }
+			});
 
 			await MetricHelper.metricIncrement(
 				this._telemetryComponent,
@@ -377,14 +432,21 @@ export class AuthorizationService implements IAuthorizationComponent {
 	 * @returns Nothing.
 	 */
 	public async removeRoleForSubject(modelId: string, subject: string, role: string): Promise<void> {
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(subject), subject);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(role), role);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
+		this.guardNoSeparator(nameof(role), role);
 
 		try {
 			const connector = this.getConnector();
 			await connector.removeRoleForSubject(modelId, subject, role);
-			await this.invalidateCacheByPrefix(modelId, subject);
+			await this.invalidateModelCacheByPrefix(modelId, subject);
+			await this._loggingComponent?.log({
+				level: "info",
+				source: AuthorizationService.CLASS_NAME,
+				ts: Date.now(),
+				message: "roleRemoved",
+				data: { modelId, subject, role }
+			});
 
 			await MetricHelper.metricIncrement(
 				this._telemetryComponent,
@@ -407,13 +469,20 @@ export class AuthorizationService implements IAuthorizationComponent {
 	 * @returns Nothing.
 	 */
 	public async removeAllRolesForSubject(modelId: string, subject: string): Promise<void> {
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(subject), subject);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
 
 		try {
 			const connector = this.getConnector();
 			await connector.removeAllRolesForSubject(modelId, subject);
-			await this.invalidateCacheByPrefix(modelId, subject);
+			await this.invalidateModelCacheByPrefix(modelId, subject);
+			await this._loggingComponent?.log({
+				level: "info",
+				source: AuthorizationService.CLASS_NAME,
+				ts: Date.now(),
+				message: "allRolesRemoved",
+				data: { modelId, subject }
+			});
 
 			await MetricHelper.metricIncrement(
 				this._telemetryComponent,
@@ -436,8 +505,8 @@ export class AuthorizationService implements IAuthorizationComponent {
 	 * @returns The assigned roles.
 	 */
 	public async getRolesForSubject(modelId: string, subject: string): Promise<string[]> {
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(subject), subject);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
 
 		try {
 			const connector = this.getConnector();
@@ -459,8 +528,8 @@ export class AuthorizationService implements IAuthorizationComponent {
 	 * @returns The subjects with the given role.
 	 */
 	public async getSubjectsForRole(modelId: string, role: string): Promise<string[]> {
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(role), role);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(role), role);
 
 		try {
 			const connector = this.getConnector();
@@ -483,9 +552,9 @@ export class AuthorizationService implements IAuthorizationComponent {
 	 * @returns True if the subject has the role.
 	 */
 	public async hasRoleForSubject(modelId: string, subject: string, role: string): Promise<boolean> {
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(subject), subject);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(role), role);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(subject), subject);
+		this.guardNoSeparator(nameof(role), role);
 
 		try {
 			const connector = this.getConnector();
@@ -512,14 +581,21 @@ export class AuthorizationService implements IAuthorizationComponent {
 		role: string,
 		inheritsFrom: string
 	): Promise<void> {
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(role), role);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(inheritsFrom), inheritsFrom);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(role), role);
+		this.guardNoSeparator(nameof(inheritsFrom), inheritsFrom);
 
 		try {
 			const connector = this.getConnector();
 			await connector.addRoleInheritance(modelId, role, inheritsFrom);
-			await this.invalidateCacheByPrefix(modelId, role);
+			await this.invalidateCacheForRoleSubjects(modelId, role);
+			await this._loggingComponent?.log({
+				level: "info",
+				source: AuthorizationService.CLASS_NAME,
+				ts: Date.now(),
+				message: "inheritanceAdded",
+				data: { modelId, role, inheritsFrom }
+			});
 
 			await MetricHelper.metricIncrement(
 				this._telemetryComponent,
@@ -547,14 +623,21 @@ export class AuthorizationService implements IAuthorizationComponent {
 		role: string,
 		inheritsFrom: string
 	): Promise<void> {
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(role), role);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(inheritsFrom), inheritsFrom);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(role), role);
+		this.guardNoSeparator(nameof(inheritsFrom), inheritsFrom);
 
 		try {
 			const connector = this.getConnector();
 			await connector.removeRoleInheritance(modelId, role, inheritsFrom);
-			await this.invalidateCacheByPrefix(modelId, role);
+			await this.invalidateCacheForRoleSubjects(modelId, role);
+			await this._loggingComponent?.log({
+				level: "info",
+				source: AuthorizationService.CLASS_NAME,
+				ts: Date.now(),
+				message: "inheritanceRemoved",
+				data: { modelId, role, inheritsFrom }
+			});
 
 			await MetricHelper.metricIncrement(
 				this._telemetryComponent,
@@ -577,8 +660,8 @@ export class AuthorizationService implements IAuthorizationComponent {
 	 * @returns The parent roles.
 	 */
 	public async getParentRoles(modelId: string, role: string): Promise<string[]> {
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(role), role);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(role), role);
 
 		try {
 			const connector = this.getConnector();
@@ -600,8 +683,8 @@ export class AuthorizationService implements IAuthorizationComponent {
 	 * @returns The child roles.
 	 */
 	public async getChildRoles(modelId: string, role: string): Promise<string[]> {
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(modelId), modelId);
-		Guards.stringValue(AuthorizationService.CLASS_NAME, nameof(role), role);
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoSeparator(nameof(role), role);
 
 		try {
 			const connector = this.getConnector();
@@ -617,80 +700,140 @@ export class AuthorizationService implements IAuthorizationComponent {
 	}
 
 	/**
-	 * Build a tenant-aware cache key for a check result.
+	 * Build a cache key for a check result.
 	 * @param subject The subject.
 	 * @param object The object.
 	 * @param action The action.
 	 * @returns The cache key string.
 	 * @internal
 	 */
-	private async buildCacheKey(subject: string, object: string, action: string): Promise<string> {
-		const contextIds = await ContextIdStore.getContextIds();
-		const tenantId = contextIds?.[ContextIdKeys.Tenant] ?? "";
-		return `${tenantId}:${subject}:${object}:${action}`;
+	private buildCacheKey(subject: string, object: string, action: string): string {
+		return `${subject}|${object}|${action}`;
 	}
 
 	/**
-	 * Get or create the per-model LFU cache.
+	 * Get or create the per-tenant, per-model LFU cache.
 	 * @param modelId The model identifier.
-	 * @returns The LFU cache for the model.
+	 * @param tenantId The tenant identifier.
+	 * @returns The LFU cache for the tenant and model.
 	 * @internal
 	 */
-	private getModelCache(modelId: string): LfuCache<boolean> {
-		let cache = this._checkCache.get(modelId);
-		if (cache === undefined) {
+	private getTenantCache(modelId: string, tenantId: string): LfuCache<boolean> {
+		let modelMap = this._checkCache.get(tenantId);
+		if (Is.empty(modelMap)) {
+			modelMap = new Map<string, LfuCache<boolean>>();
+			this._checkCache.set(tenantId, modelMap);
+		}
+		let cache = modelMap.get(modelId);
+		if (Is.empty(cache)) {
 			cache = new LfuCache<boolean>(this._checkCacheConfig);
-			this._checkCache.set(modelId, cache);
+			modelMap.set(modelId, cache);
 		}
 		return cache;
 	}
 
 	/**
-	 * Delete the exact cache entry for the given model, subject, object, and action.
+	 * Get the per-tenant, per-model LFU cache if it exists.
 	 * @param modelId The model identifier.
-	 * @param subject The subject.
-	 * @param object The object.
-	 * @param action The action.
+	 * @returns The LFU cache for the tenant and model, or undefined if it doesn't exist.
 	 * @internal
 	 */
-	private async deleteExactCacheKey(
-		modelId: string,
-		subject: string,
-		object: string,
-		action: string
-	): Promise<void> {
-		const key = await this.buildCacheKey(subject, object, action);
-		this._checkCache.get(modelId)?.delete(key);
+	private async getModelCache(modelId: string): Promise<LfuCache<boolean> | undefined> {
+		const contextIds = await ContextIdStore.getContextIds();
+		const tenantId = contextIds?.[ContextIdKeys.Tenant] ?? "root";
+		return this._checkCache.get(tenantId)?.get(modelId);
 	}
 
 	/**
-	 * Evict all cached check() results whose key starts with the given part under the current tenant.
-	 * @param modelId The model identifier.
-	 * @param part The subject or role name to use as the key prefix segment.
+	 * Evict cached check() results for every user that transitively holds the given role.
+	 * BFS-traverses child roles (those that inherit FROM the given role) so that transitive
+	 * holders are also evicted. Also evicts cache entries whose key uses the role name as the
+	 * subject segment, which covers policies assigned directly to a user ID.
+	 * @param modelId The model identifier (for connector queries).
+	 * @param role The role or subject whose associated user IDs should have their cache evicted.
 	 * @internal
 	 */
-	private async invalidateCacheByPrefix(modelId: string, part: string): Promise<void> {
-		const modelCache = this._checkCache.get(modelId);
-		if (modelCache === undefined) {
-			return;
-		}
-		const contextIds = await ContextIdStore.getContextIds();
-		const tenantId = contextIds?.[ContextIdKeys.Tenant] ?? "";
-		const prefix = `${tenantId}:${part}:`;
-		for (const key of modelCache.keys()) {
-			if (key.startsWith(prefix)) {
-				modelCache.delete(key);
+	private async invalidateCacheForRoleSubjects(modelId: string, role: string): Promise<void> {
+		const tenantCache = await this.getModelCache(modelId);
+		if (!Is.empty(tenantCache)) {
+			const connector = this.getConnector();
+			const visited = new Set<string>();
+			const queue = [role];
+
+			while (queue.length > 0) {
+				const current = queue.shift();
+				if (!Is.empty(current) && !visited.has(current)) {
+					visited.add(current);
+
+					this.invalidateCacheByPrefix(tenantCache, current);
+
+					const subjects = await connector.getSubjectsForRole(modelId, current);
+					for (const subject of subjects) {
+						this.invalidateCacheByPrefix(tenantCache, subject);
+					}
+
+					const children = await connector.getChildRoles(modelId, current);
+					for (const child of children) {
+						if (!visited.has(child)) {
+							queue.push(child);
+						}
+					}
+				}
 			}
 		}
 	}
 
 	/**
-	 * Evict all cached check() results for the given model.
+	 * Evict all cached check() results whose key starts with the given subject/role prefix.
+	 * @param modelId The model identifier (for connector queries).
+	 * @param part The subject or role name to use as the key prefix segment.
+	 * @internal
+	 */
+	private async invalidateModelCacheByPrefix(modelId: string, part: string): Promise<void> {
+		const tenantCache = await this.getModelCache(modelId);
+		if (!Is.empty(tenantCache)) {
+			this.invalidateCacheByPrefix(tenantCache, part);
+		}
+	}
+
+	/**
+	 * Evict all cached check() results whose key starts with the given subject/role prefix.
+	 * @param tenantCache The resolved LFU cache for the current tenant and model.
+	 * @param part The subject or role name to use as the key prefix segment.
+	 * @internal
+	 */
+	private invalidateCacheByPrefix(tenantCache: LfuCache<boolean>, part: string): void {
+		const prefix = `${part}|`;
+		for (const key of tenantCache.keys()) {
+			if (key.startsWith(prefix)) {
+				tenantCache.delete(key);
+			}
+		}
+	}
+
+	/**
+	 * Evict all cached check() results for the given model across all tenants.
 	 * @param modelId The model identifier.
 	 * @internal
 	 */
 	private invalidateCacheForModel(modelId: string): void {
-		this._checkCache.delete(modelId);
+		for (const modelMap of this._checkCache.values()) {
+			modelMap.delete(modelId);
+		}
+	}
+
+	/**
+	 * Throw a GeneralError if the value contains the pipe separator character.
+	 * @param fieldName The field name for the error context.
+	 * @param value The value to validate.
+	 * @throws GeneralError If the value contains a pipe character.
+	 * @internal
+	 */
+	private guardNoSeparator(fieldName: string, value: string): void {
+		Guards.stringValue(AuthorizationService.CLASS_NAME, fieldName, value);
+		if (value.includes("|")) {
+			throw new GeneralError(AuthorizationService.CLASS_NAME, "containsSeparator", { fieldName });
+		}
 	}
 
 	/**

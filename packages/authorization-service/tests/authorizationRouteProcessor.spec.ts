@@ -13,26 +13,27 @@ import {
 	AuthorizationConnectorFactory,
 	type IAuthorizationModel
 } from "@twin.org/authorization-models";
-import { ContextIdKeys, type IContextIds } from "@twin.org/context";
+import { ContextIdKeys, ContextIdStore, type IContextIds } from "@twin.org/context";
 import { ComponentFactory } from "@twin.org/core";
 import { MemoryEntityStorageConnector } from "@twin.org/entity-storage-connector-memory";
 import { EntityStorageConnectorFactory } from "@twin.org/entity-storage-models";
 import { nameof } from "@twin.org/nameof";
 import { HttpStatusCode } from "@twin.org/web";
+import { authorizationAddRoleForSubject } from "../src/authorizationRoutes.js";
 import { AuthorizationService } from "../src/authorizationService.js";
-import { AuthorizationRestProcessor } from "../src/processors/authorizationRestProcessor.js";
+import { AuthorizationRouteProcessor } from "../src/processors/authorizationRouteProcessor.js";
 
 const TEST_NAMESPACE = "test-es";
 const COMPONENT_TYPE = "authorization";
 const TEST_MODEL_ID = "rest";
 
-describe("AuthorizationRestProcessor (entity-storage backed)", () => {
+describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 	let policyStorage: MemoryEntityStorageConnector<AuthorizationPolicy>;
 	let roleStorage: MemoryEntityStorageConnector<AuthorizationRoleAssignment>;
 	let inheritanceStorage: MemoryEntityStorageConnector<AuthorizationRoleInheritance>;
 	let roleNameStorage: MemoryEntityStorageConnector<AuthorizationRoleName>;
 	let service: AuthorizationService;
-	let processor: AuthorizationRestProcessor;
+	let processor: AuthorizationRouteProcessor;
 
 	beforeEach(async () => {
 		initSchema();
@@ -76,7 +77,9 @@ describe("AuthorizationRestProcessor (entity-storage backed)", () => {
 		service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 		ComponentFactory.register(COMPONENT_TYPE, () => service);
 
-		processor = new AuthorizationRestProcessor({ config: { authorizationModelId: TEST_MODEL_ID } });
+		processor = new AuthorizationRouteProcessor({
+			config: { authorizationModelId: TEST_MODEL_ID }
+		});
 	});
 
 	afterEach(async () => {
@@ -97,7 +100,7 @@ describe("AuthorizationRestProcessor (entity-storage backed)", () => {
 	}
 
 	function makeResponse(): IHttpResponse {
-		return { statusCode: HttpStatusCode.ok, headers: {}, body: {} };
+		return { headers: {}, body: {} };
 	}
 
 	function makeRoute(
@@ -359,7 +362,7 @@ describe("AuthorizationRestProcessor (entity-storage backed)", () => {
 				{}
 			);
 
-			expect(response.statusCode).toBe(HttpStatusCode.ok);
+			expect(response.statusCode).toBeUndefined();
 		});
 
 		test("applies the check and denies when requiresAuthorization is true and no policy matches", async () => {
@@ -381,7 +384,7 @@ describe("AuthorizationRestProcessor (entity-storage backed)", () => {
 			const response = makeResponse();
 			await processor.pre(makeRequest(), response, undefined, makeContextIds(), {});
 
-			expect(response.statusCode).toBe(HttpStatusCode.ok);
+			expect(response.statusCode).toBeUndefined();
 		});
 
 		test("denies when no userId is present in context", async () => {
@@ -405,7 +408,91 @@ describe("AuthorizationRestProcessor (entity-storage backed)", () => {
 				{}
 			);
 
-			expect(response.statusCode).toBe(HttpStatusCode.ok);
+			expect(response.statusCode).toBeUndefined();
+		});
+
+		test("does not overwrite a response already set by an earlier processor", async () => {
+			await initialize({});
+
+			const response = makeResponse();
+			const originalBody = { name: "invalidToken", message: "The token was invalid." };
+			response.statusCode = HttpStatusCode.unauthorized;
+			response.body = originalBody;
+
+			await processor.pre(makeRequest(), response, makeRoute("secureAction"), makeContextIds(), {});
+
+			expect(response.statusCode).toBe(HttpStatusCode.unauthorized);
+			expect(response.body).toBe(originalBody);
+		});
+	});
+
+	describe("addRoleForSubject privilege escalation guard", () => {
+		const HTTP_CTX = { serverRequest: { url: "/", headers: {} }, processorState: {} };
+		const MODEL_ID = TEST_MODEL_ID;
+
+		test("allows caller to grant a role they directly hold", async () => {
+			await service.addRoleForSubject(MODEL_ID, "user-admin", "editor");
+
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+				await expect(
+					authorizationAddRoleForSubject(HTTP_CTX, COMPONENT_TYPE, {
+						pathParams: { modelId: MODEL_ID, subject: "user-bob" },
+						body: { role: "editor" }
+					})
+				).resolves.toMatchObject({ statusCode: HttpStatusCode.noContent });
+			});
+		});
+
+		test("denies caller granting a role they hold only via inheritance, not directly", async () => {
+			await service.addRoleInheritance(MODEL_ID, "global-admin", "editor");
+			await service.addRoleForSubject(MODEL_ID, "user-admin", "global-admin");
+
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+				await expect(
+					authorizationAddRoleForSubject(HTTP_CTX, COMPONENT_TYPE, {
+						pathParams: { modelId: MODEL_ID, subject: "user-bob" },
+						body: { role: "editor" }
+					})
+				).rejects.toThrow();
+			});
+		});
+
+		test("allows caller to grant a role they do not directly hold", async () => {
+			await service.addRoleForSubject(MODEL_ID, "user-admin", "editor");
+
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+				await expect(
+					authorizationAddRoleForSubject(HTTP_CTX, COMPONENT_TYPE, {
+						pathParams: { modelId: MODEL_ID, subject: "user-bob" },
+						body: { role: "devops" }
+					})
+				).resolves.toMatchObject({ statusCode: HttpStatusCode.noContent });
+			});
+		});
+
+		test("denies caller granting a role that is an ancestor of their role", async () => {
+			await service.addRoleInheritance(MODEL_ID, "editor", "viewer");
+			await service.addRoleForSubject(MODEL_ID, "user-admin", "editor");
+
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+				await expect(
+					authorizationAddRoleForSubject(HTTP_CTX, COMPONENT_TYPE, {
+						pathParams: { modelId: MODEL_ID, subject: "user-bob" },
+						body: { role: "viewer" }
+					})
+				).rejects.toThrow();
+			});
+		});
+
+		test("allows granting when no userId is in context (system call)", async () => {
+			await ContextIdStore.run({}, async () => {
+				await expect(
+					authorizationAddRoleForSubject(HTTP_CTX, COMPONENT_TYPE, {
+						pathParams: { modelId: MODEL_ID, subject: "user-bob" },
+						body: { role: "editor" }
+					})
+				).resolves.toMatchObject({ statusCode: HttpStatusCode.noContent });
+			});
 		});
 	});
 });

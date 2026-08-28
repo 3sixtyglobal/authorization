@@ -152,6 +152,28 @@ describe("EntityStorageAuthorizationConnector", () => {
 		test("throws when action is empty", async () => {
 			await expect(connector.addPolicy(TEST_MODEL_ID, "alice", "document", "")).rejects.toThrow();
 		});
+
+		test("throws when subject contains the | separator", async () => {
+			await expect(connector.addPolicy(TEST_MODEL_ID, "a|b", "document", "read")).rejects.toThrow();
+		});
+
+		test("throws when object contains the | separator", async () => {
+			await expect(
+				connector.addPolicy(TEST_MODEL_ID, "alice", "doc|ument", "read")
+			).rejects.toThrow();
+		});
+
+		test("throws when action contains the | separator", async () => {
+			await expect(
+				connector.addPolicy(TEST_MODEL_ID, "alice", "document", "re|ad")
+			).rejects.toThrow();
+		});
+
+		test("a|b subject and b|c object do not collide with a subject and a b|c compound object", async () => {
+			await connector.addPolicy(TEST_MODEL_ID, "alice", "document", "read");
+			await expect(connector.addPolicy(TEST_MODEL_ID, "a|b", "c", "execute")).rejects.toThrow();
+			await expect(connector.check(TEST_MODEL_ID, "a", "b|c", "execute")).rejects.toThrow();
+		});
 	});
 
 	describe("removePolicy", () => {
@@ -386,6 +408,14 @@ describe("EntityStorageAuthorizationConnector", () => {
 		test("throws when role is empty", async () => {
 			await expect(connector.addRoleForSubject(TEST_MODEL_ID, "alice", "")).rejects.toThrow();
 		});
+
+		test("throws when subject contains the | separator", async () => {
+			await expect(connector.addRoleForSubject(TEST_MODEL_ID, "a|b", "admin")).rejects.toThrow();
+		});
+
+		test("throws when role contains the | separator", async () => {
+			await expect(connector.addRoleForSubject(TEST_MODEL_ID, "alice", "ad|min")).rejects.toThrow();
+		});
 	});
 
 	describe("removeRoleForSubject", () => {
@@ -538,6 +568,18 @@ describe("EntityStorageAuthorizationConnector", () => {
 
 		test("throws when inheritsFrom is empty for addRoleInheritance", async () => {
 			await expect(connector.addRoleInheritance(TEST_MODEL_ID, "editor", "")).rejects.toThrow();
+		});
+
+		test("throws when role contains the | separator for addRoleInheritance", async () => {
+			await expect(
+				connector.addRoleInheritance(TEST_MODEL_ID, "ed|itor", "viewer")
+			).rejects.toThrow();
+		});
+
+		test("throws when inheritsFrom contains the | separator for addRoleInheritance", async () => {
+			await expect(
+				connector.addRoleInheritance(TEST_MODEL_ID, "editor", "view|er")
+			).rejects.toThrow();
 		});
 
 		test("throws when role is empty for getParentRoles", async () => {

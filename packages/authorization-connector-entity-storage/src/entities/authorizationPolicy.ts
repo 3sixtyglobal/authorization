@@ -22,7 +22,7 @@ export class AuthorizationPolicy {
 	/**
 	 * The subject (user, service, or role) the policy applies to.
 	 */
-	@property({ type: "string" })
+	@property({ type: "string", isSecondary: true })
 	public subject!: string;
 
 	/**

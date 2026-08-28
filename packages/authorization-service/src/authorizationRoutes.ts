@@ -1077,6 +1077,7 @@ export async function authorizationAddRoleForSubject(
 	Guards.stringValue(ROUTES_SOURCE, nameof(request.body.role), request.body.role);
 
 	const component = ComponentFactory.get<IAuthorizationComponent>(componentName);
+
 	await component.addRoleForSubject(
 		request.pathParams.modelId,
 		request.pathParams.subject,

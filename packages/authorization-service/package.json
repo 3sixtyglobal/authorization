@@ -33,6 +33,7 @@
 		"@twin.org/authorization-models": "0.9.3-next.0",
 		"@twin.org/context": "next",
 		"@twin.org/core": "next",
+		"@twin.org/logging-models": "next",
 		"@twin.org/nameof": "next",
 		"@twin.org/telemetry-models": "next",
 		"@twin.org/web": "next"

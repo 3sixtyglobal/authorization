@@ -4,7 +4,7 @@
 /**
  * Configuration for the authorization processor
  */
-export interface IAuthorizationRestProcessorConfig {
+export interface IAuthorizationRouteProcessorConfig {
 	/**
 	 * Include the stack with errors.
 	 */

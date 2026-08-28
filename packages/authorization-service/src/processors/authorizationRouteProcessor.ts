@@ -12,16 +12,16 @@ import { ContextIdKeys, type IContextIds } from "@twin.org/context";
 import { BaseError, ComponentFactory, GeneralError, Is, UnauthorizedError } from "@twin.org/core";
 import { nameof } from "@twin.org/nameof";
 import { HttpStatusCode } from "@twin.org/web";
-import type { IAuthorizationRestProcessorConstructorOptions } from "../models/IAuthorizationRestProcessorConstructorOptions.js";
+import type { IAuthorizationRouteProcessorConstructorOptions } from "../models/IAuthorizationRouteProcessorConstructorOptions.js";
 
 /**
  * Use the identity from the context ids to check their authorization for a route.
  */
-export class AuthorizationRestProcessor implements IBaseRouteProcessor {
+export class AuthorizationRouteProcessor implements IBaseRouteProcessor {
 	/**
 	 * Runtime name for the class.
 	 */
-	public static readonly CLASS_NAME: string = nameof<AuthorizationRestProcessor>();
+	public static readonly CLASS_NAME: string = nameof<AuthorizationRouteProcessor>();
 
 	/**
 	 * The authorization component.
@@ -42,10 +42,10 @@ export class AuthorizationRestProcessor implements IBaseRouteProcessor {
 	private readonly _includeErrorStack: boolean;
 
 	/**
-	 * Create a new instance of AuthorizationProcessor.
+	 * Create a new instance of AuthorizationRouteProcessor.
 	 * @param options Options for the processor.
 	 */
-	constructor(options?: IAuthorizationRestProcessorConstructorOptions) {
+	constructor(options?: IAuthorizationRouteProcessorConstructorOptions) {
 		this._authorizationComponent = ComponentFactory.get(
 			options?.authorizationComponentType ?? "authorization"
 		);
@@ -58,7 +58,7 @@ export class AuthorizationRestProcessor implements IBaseRouteProcessor {
 	 * @returns The class name of the component.
 	 */
 	public className(): string {
-		return AuthorizationRestProcessor.CLASS_NAME;
+		return AuthorizationRouteProcessor.CLASS_NAME;
 	}
 
 	/**
@@ -77,11 +77,16 @@ export class AuthorizationRestProcessor implements IBaseRouteProcessor {
 		contextIds: IContextIds,
 		processorState: { [id: string]: unknown }
 	): Promise<void> {
-		if (!Is.empty(route) && !(route.skipAuth ?? false) && (route.requiresAuthorization ?? true)) {
+		if (
+			(response.statusCode === undefined || response.statusCode < HttpStatusCode.badRequest) &&
+			!Is.empty(route) &&
+			!(route.skipAuth ?? false) &&
+			(route.requiresAuthorization ?? true)
+		) {
 			try {
 				const routeId = route.operationId;
 				if (!Is.stringValue(routeId)) {
-					throw new GeneralError(AuthorizationRestProcessor.CLASS_NAME, "routeIdMissing");
+					throw new GeneralError(AuthorizationRouteProcessor.CLASS_NAME, "routeIdMissing");
 				}
 
 				const userId = contextIds[ContextIdKeys.User];
@@ -94,8 +99,9 @@ export class AuthorizationRestProcessor implements IBaseRouteProcessor {
 						"execute"
 					))
 				) {
-					throw new UnauthorizedError(AuthorizationRestProcessor.CLASS_NAME, "accessDenied");
+					throw new UnauthorizedError(AuthorizationRouteProcessor.CLASS_NAME, "accessDenied");
 				}
+				response.statusCode = HttpStatusCode.ok;
 			} catch (err) {
 				HttpErrorHelper.buildResponse(
 					response,

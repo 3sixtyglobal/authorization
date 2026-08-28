@@ -157,6 +157,38 @@ describe("CasbinAuthorizationConnector", () => {
 				await expect(connector.addPolicy(TEST_MODEL_ID, "alice", "document", "")).rejects.toThrow();
 			});
 		});
+
+		test("throws when subject contains the | separator", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+				await expect(
+					connector.addPolicy(TEST_MODEL_ID, "a|b", "document", "read")
+				).rejects.toThrow();
+			});
+		});
+
+		test("throws when object contains the | separator", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+				await expect(
+					connector.addPolicy(TEST_MODEL_ID, "alice", "doc|ument", "read")
+				).rejects.toThrow();
+			});
+		});
+
+		test("throws when action contains the | separator", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+				await expect(
+					connector.addPolicy(TEST_MODEL_ID, "alice", "document", "re|ad")
+				).rejects.toThrow();
+			});
+		});
+
+		test("a|b subject and b|c object do not collide with a subject and a b|c compound object", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+				await connector.addPolicy(TEST_MODEL_ID, "alice", "document", "read");
+				await expect(connector.addPolicy(TEST_MODEL_ID, "a|b", "c", "execute")).rejects.toThrow();
+				await expect(connector.check(TEST_MODEL_ID, "a", "b|c", "execute")).rejects.toThrow();
+			});
+		});
 	});
 
 	describe("removePolicy", () => {
@@ -466,6 +498,20 @@ describe("CasbinAuthorizationConnector", () => {
 				await expect(connector.addRoleForSubject(TEST_MODEL_ID, "alice", "")).rejects.toThrow();
 			});
 		});
+
+		test("throws when subject contains the | separator", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+				await expect(connector.addRoleForSubject(TEST_MODEL_ID, "a|b", "admin")).rejects.toThrow();
+			});
+		});
+
+		test("throws when role contains the | separator", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+				await expect(
+					connector.addRoleForSubject(TEST_MODEL_ID, "alice", "ad|min")
+				).rejects.toThrow();
+			});
+		});
 	});
 
 	describe("removeRoleForSubject", () => {
@@ -662,6 +708,22 @@ describe("CasbinAuthorizationConnector", () => {
 			});
 		});
 
+		test("throws when role contains the | separator", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+				await expect(
+					connector.addRoleInheritance(TEST_MODEL_ID, "ed|itor", "viewer")
+				).rejects.toThrow();
+			});
+		});
+
+		test("throws when inheritsFrom contains the | separator", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+				await expect(
+					connector.addRoleInheritance(TEST_MODEL_ID, "editor", "vie|wer")
+				).rejects.toThrow();
+			});
+		});
+
 		test("throws when role is empty for getParentRoles", async () => {
 			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
 				await expect(connector.getParentRoles(TEST_MODEL_ID, "")).rejects.toThrow();
@@ -812,6 +874,53 @@ describe("CasbinAuthorizationConnector", () => {
 				const { roles } = await connector.getAllRoles(TEST_MODEL_ID);
 				expect(roles).not.toContain("admin");
 				expect(roles).toContain("editor");
+			});
+		});
+	});
+
+	describe("hasRoles", () => {
+		test("returns false for all roles when none are registered", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+				const result = await connector.hasRoles(TEST_MODEL_ID, ["admin", "editor"]);
+				expect(result).toEqual([false, false]);
+			});
+		});
+
+		test("returns true for a role that has been assigned to a subject", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "admin");
+				const result = await connector.hasRoles(TEST_MODEL_ID, ["admin"]);
+				expect(result).toEqual([true]);
+			});
+		});
+
+		test("returns false for a role not in the system, true for one that is", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "admin");
+				const result = await connector.hasRoles(TEST_MODEL_ID, ["admin", "editor"]);
+				expect(result).toEqual([true, false]);
+			});
+		});
+
+		test("preserves input order in returned array", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "admin");
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
+				const result = await connector.hasRoles(TEST_MODEL_ID, ["editor", "admin", "viewer"]);
+				expect(result).toEqual([true, true, false]);
+			});
+		});
+
+		test("returns empty array for empty input", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+				const result = await connector.hasRoles(TEST_MODEL_ID, []);
+				expect(result).toEqual([]);
+			});
+		});
+
+		test("throws when modelId is empty", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+				await expect(connector.hasRoles("", ["admin"])).rejects.toThrow();
 			});
 		});
 	});
