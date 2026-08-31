@@ -5,8 +5,14 @@ import type {
 	IAuthorizationModel,
 	IAuthorizationPolicy
 } from "@twin.org/authorization-models";
+import { ContextIdKeys, ContextIdStore } from "@twin.org/context";
 import { BaseError, GeneralError, Guards, Is } from "@twin.org/core";
-import { ComparisonOperator, LogicalOperator, SortDirection } from "@twin.org/entity";
+import {
+	ComparisonOperator,
+	LogicalOperator,
+	SortDirection,
+	type EntityCondition
+} from "@twin.org/entity";
 import {
 	EntityStorageConnectorFactory,
 	type IEntityStorageConnector
@@ -19,7 +25,18 @@ import { AuthorizationRoleName } from "./entities/authorizationRoleName.js";
 import type { IEntityStorageAuthorizationConnectorConstructorOptions } from "./models/IEntityStorageAuthorizationConnectorConstructorOptions.js";
 
 /**
+ * The scope value for rules not bound to a specific organization.
+ */
+const GLOBAL_SCOPE = "*";
+
+/**
  * A connector that implements the IAuthorizationConnector interface using Entity Storage for authorization.
+ *
+ * Tenant separation is delegated to the entity storage layer (partition the configured
+ * storage by the tenant context id). Organization scoping rides on the rules themselves via
+ * the ambient organization context id: writes stamp the current organization, checks and
+ * queries match rules whose organization is global ("*") or equals the current organization,
+ * and removals target the current organization exactly.
  */
 export class EntityStorageAuthorizationConnector implements IAuthorizationConnector {
 	/**
@@ -133,10 +150,9 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this.guardNoSeparator(nameof(action), action);
 
 		try {
-			const directPolicy = await this._authorizationPolicyEntityStorage.get(
-				this.policyId(modelId, subject, object, action)
-			);
-			if (directPolicy) {
+			const organization = await this.getOrganization();
+
+			if (await this.hasPolicyInScope(modelId, organization, subject, object, action)) {
 				return true;
 			}
 
@@ -145,7 +161,8 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 					logicalOperator: LogicalOperator.And,
 					conditions: [
 						{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
-						{ property: "subject", value: subject, comparison: ComparisonOperator.Equals }
+						{ property: "subject", value: subject, comparison: ComparisonOperator.Equals },
+						this.organizationCondition(organization)
 					]
 				},
 				undefined,
@@ -162,10 +179,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 				if (nextRole !== undefined && !visited.has(nextRole)) {
 					visited.add(nextRole);
 
-					const rolePolicy = await this._authorizationPolicyEntityStorage.get(
-						this.policyId(modelId, nextRole, object, action)
-					);
-					if (rolePolicy) {
+					if (await this.hasPolicyInScope(modelId, organization, nextRole, object, action)) {
 						return true;
 					}
 
@@ -174,7 +188,8 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 							logicalOperator: LogicalOperator.And,
 							conditions: [
 								{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
-								{ property: "role", value: nextRole, comparison: ComparisonOperator.Equals }
+								{ property: "role", value: nextRole, comparison: ComparisonOperator.Equals },
+								this.organizationCondition(organization)
 							]
 						},
 						undefined,
@@ -223,12 +238,14 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this.guardNoSeparator(nameof(action), action);
 
 		try {
+			const organization = await this.getOrganization();
 			const entity = new AuthorizationPolicy();
-			entity.id = this.policyId(modelId, subject, object, action);
+			entity.id = this.policyId(modelId, organization, subject, object, action);
 			entity.modelId = modelId;
 			entity.subject = subject;
 			entity.object = object;
 			entity.action = action;
+			entity.organization = organization;
 			await this._authorizationPolicyEntityStorage.set(entity);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
@@ -264,8 +281,9 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this.guardNoSeparator(nameof(action), action);
 
 		try {
+			const organization = await this.getOrganization();
 			await this._authorizationPolicyEntityStorage.remove(
-				this.policyId(modelId, subject, object, action)
+				this.policyId(modelId, organization, subject, object, action)
 			);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
@@ -334,16 +352,20 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		}
 
 		try {
+			const organization = await this.getOrganization();
+			const conditions: EntityCondition<AuthorizationPolicy>[] = [
+				{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
+				this.organizationCondition(organization)
+			];
+			if (Is.stringValue(subject)) {
+				conditions.push({
+					property: "subject",
+					value: subject,
+					comparison: ComparisonOperator.Equals
+				});
+			}
 			const result = await this._authorizationPolicyEntityStorage.query(
-				Is.stringValue(subject)
-					? {
-							logicalOperator: LogicalOperator.And,
-							conditions: [
-								{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
-								{ property: "subject", value: subject, comparison: ComparisonOperator.Equals }
-							]
-						}
-					: { property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
+				{ logicalOperator: LogicalOperator.And, conditions },
 				undefined,
 				undefined,
 				cursor,
@@ -353,7 +375,8 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 				entities: (result.entities as AuthorizationPolicy[]).map(e => ({
 					subject: e.subject,
 					object: e.object,
-					action: e.action
+					action: e.action,
+					organization: e.organization === GLOBAL_SCOPE ? undefined : e.organization
 				})),
 				cursor: result.cursor
 			};
@@ -460,11 +483,13 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this.guardNoSeparator(nameof(role), role);
 
 		try {
+			const organization = await this.getOrganization();
 			const assignment = new AuthorizationRoleAssignment();
-			assignment.id = this.roleId(modelId, subject, role);
+			assignment.id = this.roleId(modelId, organization, subject, role);
 			assignment.modelId = modelId;
 			assignment.subject = subject;
 			assignment.role = role;
+			assignment.organization = organization;
 			const roleName = new AuthorizationRoleName();
 			roleName.id = this.roleNameId(modelId, role);
 			roleName.modelId = modelId;
@@ -500,8 +525,9 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this.guardNoSeparator(nameof(role), role);
 
 		try {
+			const organization = await this.getOrganization();
 			await this._authorizationRoleAssignmentEntityStorage.remove(
-				this.roleId(modelId, subject, role)
+				this.roleId(modelId, organization, subject, role)
 			);
 			await this.removeRoleNameIfUnreferenced(modelId, role);
 		} catch (err) {
@@ -529,12 +555,18 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this.guardNoSeparator(nameof(subject), subject);
 
 		try {
+			const organization = await this.getOrganization();
 			const result = await this._authorizationRoleAssignmentEntityStorage.query(
 				{
 					logicalOperator: LogicalOperator.And,
 					conditions: [
 						{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
-						{ property: "subject", value: subject, comparison: ComparisonOperator.Equals }
+						{ property: "subject", value: subject, comparison: ComparisonOperator.Equals },
+						{
+							property: "organization",
+							value: organization,
+							comparison: ComparisonOperator.Equals
+						}
 					]
 				},
 				undefined,
@@ -571,18 +603,22 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this.guardNoSeparator(nameof(subject), subject);
 
 		try {
+			const organization = await this.getOrganization();
 			const result = await this._authorizationRoleAssignmentEntityStorage.query(
 				{
 					logicalOperator: LogicalOperator.And,
 					conditions: [
 						{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
-						{ property: "subject", value: subject, comparison: ComparisonOperator.Equals }
+						{ property: "subject", value: subject, comparison: ComparisonOperator.Equals },
+						this.organizationCondition(organization)
 					]
 				},
 				undefined,
 				["role"]
 			);
-			return result.entities.map(e => e.role).filter((r): r is string => r !== undefined);
+			return Array.from(
+				new Set(result.entities.map(e => e.role).filter((r): r is string => r !== undefined))
+			);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -608,18 +644,22 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this.guardNoSeparator(nameof(role), role);
 
 		try {
+			const organization = await this.getOrganization();
 			const result = await this._authorizationRoleAssignmentEntityStorage.query(
 				{
 					logicalOperator: LogicalOperator.And,
 					conditions: [
 						{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
-						{ property: "role", value: role, comparison: ComparisonOperator.Equals }
+						{ property: "role", value: role, comparison: ComparisonOperator.Equals },
+						this.organizationCondition(organization)
 					]
 				},
 				undefined,
 				["subject"]
 			);
-			return result.entities.map(e => e.subject).filter((s): s is string => s !== undefined);
+			return Array.from(
+				new Set(result.entities.map(e => e.subject).filter((s): s is string => s !== undefined))
+			);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -647,10 +687,15 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this.guardNoSeparator(nameof(role), role);
 
 		try {
-			const entity = await this._authorizationRoleAssignmentEntityStorage.get(
-				this.roleId(modelId, subject, role)
+			const organization = await this.getOrganization();
+			const entities = await Promise.all(
+				this.organizationCombinations(organization).map(async candidate =>
+					this._authorizationRoleAssignmentEntityStorage.get(
+						this.roleId(modelId, candidate, subject, role)
+					)
+				)
 			);
-			return entity !== undefined;
+			return entities.some(entity => entity !== undefined);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -682,11 +727,13 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this.guardNoSeparator(nameof(inheritsFrom), inheritsFrom);
 
 		try {
+			const organization = await this.getOrganization();
 			const inheritance = new AuthorizationRoleInheritance();
-			inheritance.id = this.inheritanceId(modelId, role, inheritsFrom);
+			inheritance.id = this.inheritanceId(modelId, organization, role, inheritsFrom);
 			inheritance.modelId = modelId;
 			inheritance.role = role;
 			inheritance.inheritsFrom = inheritsFrom;
+			inheritance.organization = organization;
 			const roleNameEntity = new AuthorizationRoleName();
 			roleNameEntity.id = this.roleNameId(modelId, role);
 			roleNameEntity.modelId = modelId;
@@ -731,8 +778,9 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this.guardNoSeparator(nameof(inheritsFrom), inheritsFrom);
 
 		try {
+			const organization = await this.getOrganization();
 			await this._authorizationRoleInheritanceEntityStorage.remove(
-				this.inheritanceId(modelId, role, inheritsFrom)
+				this.inheritanceId(modelId, organization, role, inheritsFrom)
 			);
 			await Promise.all([
 				this.removeRoleNameIfUnreferenced(modelId, role),
@@ -763,18 +811,24 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this.guardNoSeparator(nameof(role), role);
 
 		try {
+			const organization = await this.getOrganization();
 			const result = await this._authorizationRoleInheritanceEntityStorage.query(
 				{
 					logicalOperator: LogicalOperator.And,
 					conditions: [
 						{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
-						{ property: "role", value: role, comparison: ComparisonOperator.Equals }
+						{ property: "role", value: role, comparison: ComparisonOperator.Equals },
+						this.organizationCondition(organization)
 					]
 				},
 				undefined,
 				["inheritsFrom"]
 			);
-			return result.entities.map(e => e.inheritsFrom).filter((r): r is string => r !== undefined);
+			return Array.from(
+				new Set(
+					result.entities.map(e => e.inheritsFrom).filter((r): r is string => r !== undefined)
+				)
+			);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -800,18 +854,22 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this.guardNoSeparator(nameof(role), role);
 
 		try {
+			const organization = await this.getOrganization();
 			const result = await this._authorizationRoleInheritanceEntityStorage.query(
 				{
 					logicalOperator: LogicalOperator.And,
 					conditions: [
 						{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
-						{ property: "inheritsFrom", value: role, comparison: ComparisonOperator.Equals }
+						{ property: "inheritsFrom", value: role, comparison: ComparisonOperator.Equals },
+						this.organizationCondition(organization)
 					]
 				},
 				undefined,
 				["role"]
 			);
-			return result.entities.map(e => e.role).filter((r): r is string => r !== undefined);
+			return Array.from(
+				new Set(result.entities.map(e => e.role).filter((r): r is string => r !== undefined))
+			);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -828,38 +886,134 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	/**
 	 * Build the compound primary key for a policy.
 	 * @param modelId The model identifier.
+	 * @param organization The organization scope.
 	 * @param subject The subject.
 	 * @param object The object.
 	 * @param action The action.
 	 * @returns The compound id string.
 	 * @internal
 	 */
-	private policyId(modelId: string, subject: string, object: string, action: string): string {
-		return `${modelId}|${subject}|${object}|${action}`;
+	private policyId(
+		modelId: string,
+		organization: string,
+		subject: string,
+		object: string,
+		action: string
+	): string {
+		return `${modelId}|${organization}|${subject}|${object}|${action}`;
 	}
 
 	/**
 	 * Build the compound primary key for a role assignment.
 	 * @param modelId The model identifier.
+	 * @param organization The organization scope.
 	 * @param subject The subject.
 	 * @param role The role.
 	 * @returns The compound id string.
 	 * @internal
 	 */
-	private roleId(modelId: string, subject: string, role: string): string {
-		return `${modelId}|${subject}|${role}`;
+	private roleId(modelId: string, organization: string, subject: string, role: string): string {
+		return `${modelId}|${organization}|${subject}|${role}`;
 	}
 
 	/**
 	 * Build the compound primary key for a role inheritance relationship.
 	 * @param modelId The model identifier.
+	 * @param organization The organization scope.
 	 * @param role The child role.
 	 * @param inheritsFrom The parent role.
 	 * @returns The compound id string.
 	 * @internal
 	 */
-	private inheritanceId(modelId: string, role: string, inheritsFrom: string): string {
-		return `${modelId}|${role}|${inheritsFrom}`;
+	private inheritanceId(
+		modelId: string,
+		organization: string,
+		role: string,
+		inheritsFrom: string
+	): string {
+		return `${modelId}|${organization}|${role}|${inheritsFrom}`;
+	}
+
+	/**
+	 * Resolve the organization scope from the ambient context ids, following the user
+	 * organization when present and falling back to the deployment organization, matching
+	 * the convention used by other TWIN services.
+	 * @returns The resolved organization, GLOBAL_SCOPE when no organization context is present.
+	 * @internal
+	 */
+	private async getOrganization(): Promise<string> {
+		const contextIds = await ContextIdStore.getContextIds();
+		const organization =
+			contextIds?.[ContextIdKeys.UserOrganization] ??
+			contextIds?.[ContextIdKeys.Organization] ??
+			GLOBAL_SCOPE;
+		this.guardNoSeparator("organization", organization);
+		return organization;
+	}
+
+	/**
+	 * The distinct organization values a rule may carry to be visible in the given scope:
+	 * the scoped value and GLOBAL_SCOPE.
+	 * @param organization The current organization scope.
+	 * @returns The distinct values.
+	 * @internal
+	 */
+	private organizationCombinations(organization: string): string[] {
+		return organization === GLOBAL_SCOPE ? [GLOBAL_SCOPE] : [organization, GLOBAL_SCOPE];
+	}
+
+	/**
+	 * Build a query condition matching rules visible in the given organization scope: rules
+	 * whose organization is GLOBAL_SCOPE or equal to the scoped value.
+	 * @param organization The current organization scope.
+	 * @returns The condition to append to a query.
+	 * @internal
+	 */
+	private organizationCondition<T extends { organization: string }>(
+		organization: string
+	): EntityCondition<T> {
+		if (organization === GLOBAL_SCOPE) {
+			return {
+				property: "organization",
+				value: GLOBAL_SCOPE,
+				comparison: ComparisonOperator.Equals
+			};
+		}
+		return {
+			logicalOperator: LogicalOperator.Or,
+			conditions: [
+				{ property: "organization", value: organization, comparison: ComparisonOperator.Equals },
+				{ property: "organization", value: GLOBAL_SCOPE, comparison: ComparisonOperator.Equals }
+			]
+		};
+	}
+
+	/**
+	 * Check whether a policy for the subject/object/action exists at any organization value
+	 * visible in the given scope.
+	 * @param modelId The model identifier.
+	 * @param organization The current organization scope.
+	 * @param subject The subject.
+	 * @param object The object.
+	 * @param action The action.
+	 * @returns True if a visible policy exists.
+	 * @internal
+	 */
+	private async hasPolicyInScope(
+		modelId: string,
+		organization: string,
+		subject: string,
+		object: string,
+		action: string
+	): Promise<boolean> {
+		const entities = await Promise.all(
+			this.organizationCombinations(organization).map(async candidate =>
+				this._authorizationPolicyEntityStorage.get(
+					this.policyId(modelId, candidate, subject, object, action)
+				)
+			)
+		);
+		return entities.some(entity => entity !== undefined);
 	}
 
 	/**

@@ -19,4 +19,9 @@ export interface IAuthorizationPolicy {
 	 * The action the policy controls.
 	 */
 	action: string;
+
+	/**
+	 * The organization the policy is scoped to, omitted for a global policy.
+	 */
+	organization?: string;
 }

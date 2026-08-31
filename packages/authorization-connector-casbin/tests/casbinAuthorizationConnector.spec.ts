@@ -1003,4 +1003,137 @@ describe("CasbinAuthorizationConnector", () => {
 			});
 		});
 	});
+
+	describe("organization scoping", () => {
+		const ORG_A = "org-a";
+		const ORG_B = "org-b";
+
+		afterEach(async () => {
+			for (const org of [ORG_A, ORG_B]) {
+				await ContextIdStore.run(
+					{ [ContextIdKeys.Tenant]: TEST_TENANT_A, [ContextIdKeys.Organization]: org },
+					async () => {
+						const { entities } = await connector.getAllPolicies(TEST_MODEL_ID);
+						for (const policy of entities) {
+							if (policy.organization === org) {
+								await connector.removePolicy(
+									TEST_MODEL_ID,
+									policy.subject,
+									policy.object,
+									policy.action
+								);
+							}
+						}
+						await connector.removeAllRolesForSubject(TEST_MODEL_ID, "alice");
+					}
+				);
+			}
+		});
+
+		test("an organization-scoped policy round-trips and is reported with its organization", async () => {
+			await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: TEST_TENANT_A, [ContextIdKeys.Organization]: ORG_A },
+				async () => {
+					await connector.addPolicy(TEST_MODEL_ID, "alice", "document", "read");
+					const { entities } = await connector.getAllPolicies(TEST_MODEL_ID);
+					expect(entities).toEqual([
+						{ subject: "alice", object: "document", action: "read", organization: ORG_A }
+					]);
+				}
+			);
+
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+				const { entities } = await connector.getAllPolicies(TEST_MODEL_ID);
+				expect(entities).toEqual([]);
+			});
+		});
+
+		test("a global policy matches under an organization context, a scoped one only its own", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+				await connector.addPolicy(TEST_MODEL_ID, "alice", "document", "read");
+			});
+			await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: TEST_TENANT_A, [ContextIdKeys.Organization]: ORG_A },
+				async () => {
+					await connector.addPolicy(TEST_MODEL_ID, "alice", "document", "write");
+				}
+			);
+
+			await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: TEST_TENANT_A, [ContextIdKeys.Organization]: ORG_A },
+				async () => {
+					await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(
+						true
+					);
+					await expect(connector.check(TEST_MODEL_ID, "alice", "document", "write")).resolves.toBe(
+						true
+					);
+				}
+			);
+			await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: TEST_TENANT_A, [ContextIdKeys.Organization]: ORG_B },
+				async () => {
+					await expect(connector.check(TEST_MODEL_ID, "alice", "document", "write")).resolves.toBe(
+						false
+					);
+				}
+			);
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "write")).resolves.toBe(
+					false
+				);
+			});
+		});
+
+		test("an organization-scoped role assignment grants access through a global role policy", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+				await connector.addPolicy(TEST_MODEL_ID, "editor", "document", "write");
+			});
+			await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: TEST_TENANT_A, [ContextIdKeys.Organization]: ORG_A },
+				async () => {
+					await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
+				}
+			);
+
+			await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: TEST_TENANT_A, [ContextIdKeys.Organization]: ORG_A },
+				async () => {
+					await expect(connector.check(TEST_MODEL_ID, "alice", "document", "write")).resolves.toBe(
+						true
+					);
+					await expect(connector.hasRoleForSubject(TEST_MODEL_ID, "alice", "editor")).resolves.toBe(
+						true
+					);
+				}
+			);
+			await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: TEST_TENANT_A, [ContextIdKeys.Organization]: ORG_B },
+				async () => {
+					await expect(connector.check(TEST_MODEL_ID, "alice", "document", "write")).resolves.toBe(
+						false
+					);
+					await expect(connector.hasRoleForSubject(TEST_MODEL_ID, "alice", "editor")).resolves.toBe(
+						false
+					);
+				}
+			);
+		});
+
+		test("removal under an organization context does not remove the global rule", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+				await connector.addPolicy(TEST_MODEL_ID, "alice", "document", "read");
+			});
+
+			await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: TEST_TENANT_A, [ContextIdKeys.Organization]: ORG_A },
+				async () => {
+					await connector.removePolicy(TEST_MODEL_ID, "alice", "document", "read");
+					await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(
+						true
+					);
+				}
+			);
+		});
+	});
 });

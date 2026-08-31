@@ -8,7 +8,8 @@ import { entity, property } from "@twin.org/entity";
 @entity()
 export class AuthorizationRoleInheritance {
 	/**
-	 * The compound identifier for this inheritance relationship, in "modelId|role|inheritsFrom" format.
+	 * The compound identifier for this inheritance relationship, in
+	 * "modelId|organization|role|inheritsFrom" format.
 	 */
 	@property({ type: "string", isPrimary: true })
 	public id!: string;
@@ -30,4 +31,10 @@ export class AuthorizationRoleInheritance {
 	 */
 	@property({ type: "string", isSecondary: true })
 	public inheritsFrom!: string;
+
+	/**
+	 * The organization the inheritance is scoped to, "*" for a global inheritance.
+	 */
+	@property({ type: "string", isSecondary: true })
+	public organization!: string;
 }

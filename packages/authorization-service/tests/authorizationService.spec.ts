@@ -183,6 +183,66 @@ describe("AuthorizationService", () => {
 			expect(spy).toHaveBeenCalledTimes(3);
 		});
 
+		test("cache keys are organization-aware", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			const spy = vi.spyOn(connector, "check");
+
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: "orgA" }, async () =>
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
+			);
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: "orgB" }, async () =>
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
+			);
+
+			expect(spy).toHaveBeenCalledTimes(2);
+		});
+
+		test("a global addPolicy invalidates organization caches", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			const spy = vi.spyOn(connector, "check");
+
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: "orgA" }, async () =>
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
+			);
+			expect(spy).toHaveBeenCalledTimes(1);
+
+			// A rule added with no organization context is global and matches inside orgA too,
+			// so orgA's cached result must not survive it.
+			await service.addPolicy(TEST_MODEL_ID, "alice", "/data", "read");
+
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: "orgA" }, async () =>
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
+			);
+			expect(spy).toHaveBeenCalledTimes(2);
+		});
+
+		test("an organization-scoped addPolicy does not invalidate another organization's cache", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			const spy = vi.spyOn(connector, "check");
+
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: "orgA" }, async () =>
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
+			);
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: "orgB" }, async () =>
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
+			);
+			expect(spy).toHaveBeenCalledTimes(2);
+
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: "orgA" }, async () =>
+				service.addPolicy(TEST_MODEL_ID, "alice", "/data", "read")
+			);
+
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: "orgA" }, async () =>
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
+			);
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: "orgB" }, async () =>
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
+			);
+
+			// orgA's alice entry evicted, orgB's alice entry still cached
+			expect(spy).toHaveBeenCalledTimes(3);
+		});
+
 		test("caches false results", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");

@@ -123,3 +123,26 @@ Access is evaluated transitively through the inheritance chain:
 | `userList`     |                |      ✓       |       ✓        |
 | `userCreate`   |                |      ✓       |       ✓        |
 | `userDelete`   |                |      ✓       |       ✓        |
+
+## Tenant and organization scoping
+
+Rules can be scoped along two independent dimensions, both resolved from the ambient context ids rather than passed as parameters, so the `IAuthorizationConnector` / `IAuthorizationComponent` method signatures are unchanged.
+
+**Tenant** separation is a storage concern. The entity storage connector delegates it to the entity storage layer: partition the configured storage by the tenant context id (`partitionContextIds: [ContextIdKeys.Tenant]`) and each tenant gets a fully isolated policy set. The Casbin connector provisions a dedicated enforcer and policy table per tenant. In both cases two tenants can never see each other's rules.
+
+**Organization** scoping rides on the rules themselves, inside a tenant. The organization is resolved as `ContextIdKeys.UserOrganization`, falling back to `ContextIdKeys.Organization` (the same convention other TWIN services use). The rules are:
+
+- **Writes stamp the current organization.** `addPolicy`, `addRoleForSubject`, and `addRoleInheritance` called with an organization context create organization-scoped rules; called without one they create global rules, exactly as before.
+- **Checks and queries match global rules plus the current organization's rules.** A global rule is visible in every organization; an organization-scoped rule is visible only when the ambient organization matches. Without an organization context only global rules apply, so one organization's rules can never influence another's decisions, or global ones.
+- **Removals target the current organization exactly.** Removing a rule under an organization context removes only that organization's rule; a global rule can only be removed from a global context.
+
+Role names are a single namespace per model: `getAllRoles` and `hasRoles` report names across all organizations, while assignments, inheritance, and policies are scoped.
+
+### Migrating from global to organization-specific rules
+
+Because global rules stay visible in every organization, a deployment can start global and move to organization-specific rules later without changing any `check` call sites:
+
+1. For each organization, re-create the rule under that organization's context (`addPolicy` / `addRoleForSubject` / `addRoleInheritance` with the organization context id set).
+2. Remove the global rule from a global context.
+
+Behaviour is identical before and after the migration; organizations can then diverge independently. Note that rules are allow-only: a global rule cannot be overridden per organization, so step 2 is required before an organization's copy can be meaningfully revoked.

@@ -22,7 +22,14 @@ export interface ICasdoorPolicyRule {
 	V1: string;
 
 	/**
-	 * The third value in the rule (action for "p"; unused for "g").
+	 * The third value in the rule (action for "p"; organization scope for "g", empty for a
+	 * global rule).
 	 */
 	V2: string;
+
+	/**
+	 * The fourth value in the rule (organization scope for "p", empty for a global rule;
+	 * unused for "g").
+	 */
+	V3?: string;
 }

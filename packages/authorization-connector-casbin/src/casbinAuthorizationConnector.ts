@@ -25,6 +25,12 @@ import type { ICasdoorPolicyRule } from "./models/ICasdoorPolicyRule.js";
 
 /**
  * A connector that implements the IAuthorizationConnector interface using the Casbin server REST API.
+ *
+ * Tenant separation is physical: each tenant gets its own enforcer and policy table.
+ * Organization scoping rides on the rules themselves via the ambient organization context id:
+ * writes stamp the current organization (the last value slot of each rule), checks and queries
+ * match rules whose organization is empty (global) or equals the current organization, and
+ * removals target the current organization exactly.
  */
 export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	/**
@@ -215,10 +221,15 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		this.guardNoSeparator(nameof(action), action);
 
 		try {
+			const organizationId = await this.getOrganizationId();
 			const allRules = await this.getAllRawPolicies(modelId);
 
-			const permissions = allRules.filter(r => r.Ptype === "p");
-			const groupings = allRules.filter(r => r.Ptype === "g");
+			const permissions = allRules.filter(
+				r => r.Ptype === "p" && this.organizationMatches(r.V3, organizationId)
+			);
+			const groupings = allRules.filter(
+				r => r.Ptype === "g" && this.organizationMatches(r.V2, organizationId)
+			);
 
 			const roleGraph = new Map<string, Set<string>>();
 			for (const g of groupings) {
@@ -276,15 +287,22 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 
 		try {
 			await this.ensureEnforcer(modelId);
+			const organizationId = await this.getOrganizationId();
 			const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
 			const response = await FetchHelper.fetchJson<
-				{ ptype: string; v0: string; v1: string; v2: string },
+				{ ptype: string; v0: string; v1: string; v2: string; v3?: string },
 				ICasbinServerResponse<string>
 			>(
 				CasbinAuthorizationConnector.CLASS_NAME,
 				`${this._baseUrl}/api/add-policy?id=${encodedEnforcerId}`,
 				HttpMethod.POST,
-				{ ptype: "p", v0: subject, v1: object, v2: action },
+				{
+					ptype: "p",
+					v0: subject,
+					v1: object,
+					v2: action,
+					v3: Is.stringValue(organizationId) ? organizationId : undefined
+				},
 				this._requestOptions
 			);
 
@@ -323,15 +341,22 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		this.guardNoSeparator(nameof(action), action);
 
 		try {
+			const organizationId = await this.getOrganizationId();
 			const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
 			const response = await FetchHelper.fetchJson<
-				{ ptype: string; v0: string; v1: string; v2: string },
+				{ ptype: string; v0: string; v1: string; v2: string; v3?: string },
 				ICasbinServerResponse<string>
 			>(
 				CasbinAuthorizationConnector.CLASS_NAME,
 				`${this._baseUrl}/api/remove-policy?id=${encodedEnforcerId}`,
 				HttpMethod.POST,
-				{ ptype: "p", v0: subject, v1: object, v2: action },
+				{
+					ptype: "p",
+					v0: subject,
+					v1: object,
+					v2: action,
+					v3: Is.stringValue(organizationId) ? organizationId : undefined
+				},
 				this._requestOptions
 			);
 
@@ -391,10 +416,16 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		}
 
 		try {
+			const organizationId = await this.getOrganizationId();
 			const rules = await this.getAllRawPolicies(modelId);
 			let policies = rules
-				.filter(r => r.Ptype === "p")
-				.map(r => ({ subject: r.V0, object: r.V1, action: r.V2 }));
+				.filter(r => r.Ptype === "p" && this.organizationMatches(r.V3, organizationId))
+				.map(r => ({
+					subject: r.V0,
+					object: r.V1,
+					action: r.V2,
+					organization: Is.stringValue(r.V3) ? r.V3 : undefined
+				}));
 
 			if (subject !== undefined) {
 				policies = policies.filter(p => p.subject === subject);
@@ -532,15 +563,21 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 
 		try {
 			await this.ensureEnforcer(modelId);
+			const organizationId = await this.getOrganizationId();
 			const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
 			const response = await FetchHelper.fetchJson<
-				{ ptype: string; v0: string; v1: string },
+				{ ptype: string; v0: string; v1: string; v2?: string },
 				ICasbinServerResponse<string>
 			>(
 				CasbinAuthorizationConnector.CLASS_NAME,
 				`${this._baseUrl}/api/add-policy?id=${encodedEnforcerId}`,
 				HttpMethod.POST,
-				{ ptype: "g", v0: subject, v1: role },
+				{
+					ptype: "g",
+					v0: subject,
+					v1: role,
+					v2: Is.stringValue(organizationId) ? organizationId : undefined
+				},
 				this._requestOptions
 			);
 
@@ -572,15 +609,21 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		this.guardNoSeparator(nameof(role), role);
 
 		try {
+			const organizationId = await this.getOrganizationId();
 			const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
 			const response = await FetchHelper.fetchJson<
-				{ ptype: string; v0: string; v1: string },
+				{ ptype: string; v0: string; v1: string; v2?: string },
 				ICasbinServerResponse<string>
 			>(
 				CasbinAuthorizationConnector.CLASS_NAME,
 				`${this._baseUrl}/api/remove-policy?id=${encodedEnforcerId}`,
 				HttpMethod.POST,
-				{ ptype: "g", v0: subject, v1: role },
+				{
+					ptype: "g",
+					v0: subject,
+					v1: role,
+					v2: Is.stringValue(organizationId) ? organizationId : undefined
+				},
 				this._requestOptions
 			);
 
@@ -610,8 +653,14 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		this.guardNoSeparator(nameof(subject), subject);
 
 		try {
+			const organizationId = await this.getOrganizationId();
 			const rules = await this.getAllRawPolicies(modelId);
-			const subjectRoles = rules.filter(r => r.Ptype === "g" && r.V0 === subject);
+			const subjectRoles = rules.filter(
+				r =>
+					r.Ptype === "g" &&
+					r.V0 === subject &&
+					(Is.stringValue(r.V2) ? r.V2 : undefined) === organizationId
+			);
 			for (const rule of subjectRoles) {
 				await this.removeRoleForSubject(modelId, subject, rule.V1);
 			}
@@ -640,8 +689,20 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		this.guardNoSeparator(nameof(subject), subject);
 
 		try {
+			const organizationId = await this.getOrganizationId();
 			const rules = await this.getAllRawPolicies(modelId);
-			return rules.filter(r => r.Ptype === "g" && r.V0 === subject).map(r => r.V1);
+			return Array.from(
+				new Set(
+					rules
+						.filter(
+							r =>
+								r.Ptype === "g" &&
+								r.V0 === subject &&
+								this.organizationMatches(r.V2, organizationId)
+						)
+						.map(r => r.V1)
+				)
+			);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -667,8 +728,18 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		this.guardNoSeparator(nameof(role), role);
 
 		try {
+			const organizationId = await this.getOrganizationId();
 			const rules = await this.getAllRawPolicies(modelId);
-			return rules.filter(r => r.Ptype === "g" && r.V1 === role).map(r => r.V0);
+			return Array.from(
+				new Set(
+					rules
+						.filter(
+							r =>
+								r.Ptype === "g" && r.V1 === role && this.organizationMatches(r.V2, organizationId)
+						)
+						.map(r => r.V0)
+				)
+			);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -696,8 +767,15 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		this.guardNoSeparator(nameof(role), role);
 
 		try {
+			const organizationId = await this.getOrganizationId();
 			const rules = await this.getAllRawPolicies(modelId);
-			return rules.some(r => r.Ptype === "g" && r.V0 === subject && r.V1 === role);
+			return rules.some(
+				r =>
+					r.Ptype === "g" &&
+					r.V0 === subject &&
+					r.V1 === role &&
+					this.organizationMatches(r.V2, organizationId)
+			);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -730,15 +808,21 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 
 		try {
 			await this.ensureEnforcer(modelId);
+			const organizationId = await this.getOrganizationId();
 			const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
 			const response = await FetchHelper.fetchJson<
-				{ ptype: string; v0: string; v1: string },
+				{ ptype: string; v0: string; v1: string; v2?: string },
 				ICasbinServerResponse<string>
 			>(
 				CasbinAuthorizationConnector.CLASS_NAME,
 				`${this._baseUrl}/api/add-policy?id=${encodedEnforcerId}`,
 				HttpMethod.POST,
-				{ ptype: "g", v0: role, v1: inheritsFrom },
+				{
+					ptype: "g",
+					v0: role,
+					v1: inheritsFrom,
+					v2: Is.stringValue(organizationId) ? organizationId : undefined
+				},
 				this._requestOptions
 			);
 
@@ -774,15 +858,21 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		this.guardNoSeparator(nameof(inheritsFrom), inheritsFrom);
 
 		try {
+			const organizationId = await this.getOrganizationId();
 			const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
 			const response = await FetchHelper.fetchJson<
-				{ ptype: string; v0: string; v1: string },
+				{ ptype: string; v0: string; v1: string; v2?: string },
 				ICasbinServerResponse<string>
 			>(
 				CasbinAuthorizationConnector.CLASS_NAME,
 				`${this._baseUrl}/api/remove-policy?id=${encodedEnforcerId}`,
 				HttpMethod.POST,
-				{ ptype: "g", v0: role, v1: inheritsFrom },
+				{
+					ptype: "g",
+					v0: role,
+					v1: inheritsFrom,
+					v2: Is.stringValue(organizationId) ? organizationId : undefined
+				},
 				this._requestOptions
 			);
 
@@ -812,8 +902,18 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		this.guardNoSeparator(nameof(role), role);
 
 		try {
+			const organizationId = await this.getOrganizationId();
 			const rules = await this.getAllRawPolicies(modelId);
-			return rules.filter(r => r.Ptype === "g" && r.V0 === role).map(r => r.V1);
+			return Array.from(
+				new Set(
+					rules
+						.filter(
+							r =>
+								r.Ptype === "g" && r.V0 === role && this.organizationMatches(r.V2, organizationId)
+						)
+						.map(r => r.V1)
+				)
+			);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -839,8 +939,18 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		this.guardNoSeparator(nameof(role), role);
 
 		try {
+			const organizationId = await this.getOrganizationId();
 			const rules = await this.getAllRawPolicies(modelId);
-			return rules.filter(r => r.Ptype === "g" && r.V1 === role).map(r => r.V0);
+			return Array.from(
+				new Set(
+					rules
+						.filter(
+							r =>
+								r.Ptype === "g" && r.V1 === role && this.organizationMatches(r.V2, organizationId)
+						)
+						.map(r => r.V0)
+				)
+			);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -876,6 +986,35 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		const contextIds = await ContextIdStore.getContextIds();
 		const tenantId = contextIds?.[ContextIdKeys.Tenant];
 		return Is.stringValue(tenantId) ? tenantId : "root";
+	}
+
+	/**
+	 * Get the organization ID from the ambient context, following the user organization
+	 * when present and falling back to the deployment organization, matching the convention
+	 * used by other TWIN services.
+	 * @returns The organization ID, or undefined for the global scope.
+	 * @internal
+	 */
+	private async getOrganizationId(): Promise<string | undefined> {
+		const contextIds = await ContextIdStore.getContextIds();
+		const organizationId =
+			contextIds?.[ContextIdKeys.UserOrganization] ?? contextIds?.[ContextIdKeys.Organization];
+		return Is.stringValue(organizationId) ? organizationId : undefined;
+	}
+
+	/**
+	 * Check whether a rule's organization value is visible in the given organization scope:
+	 * an empty value is a global rule and always matches, otherwise the values must be equal.
+	 * @param ruleOrganization The organization value stored on the rule.
+	 * @param organizationId The current organization scope, undefined for global.
+	 * @returns True if the rule is visible.
+	 * @internal
+	 */
+	private organizationMatches(
+		ruleOrganization: string | undefined,
+		organizationId: string | undefined
+	): boolean {
+		return !Is.stringValue(ruleOrganization) || ruleOrganization === organizationId;
 	}
 
 	/**

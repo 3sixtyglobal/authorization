@@ -57,8 +57,9 @@ export class AuthorizationService implements IAuthorizationComponent {
 	private readonly _checkCacheConfig: { capacity?: number; ttiMs: number };
 
 	/**
-	 * Per-tenant, per-model LFU caches for check() results.
-	 * Outer key: tenant identifier ("root" when no tenant is set). Inner key: model identifier.
+	 * Per-scope, per-model LFU caches for check() results.
+	 * Outer key: "tenant|organization" scope key ("root" when no tenant is set, "*" when no
+	 * organization is set). Inner key: model identifier.
 	 * @internal
 	 */
 	private readonly _checkCache: Map<string, Map<string, LfuCache<boolean>>>;
@@ -154,10 +155,9 @@ export class AuthorizationService implements IAuthorizationComponent {
 
 		try {
 			const connector = this.getConnector();
-			const contextIds = await ContextIdStore.getContextIds();
-			const tenantId = contextIds?.[ContextIdKeys.Tenant] ?? "root";
+			const scopeKey = await this.getScopeKey();
 			const key = this.buildCacheKey(subject, object, action);
-			return await this.getTenantCache(modelId, tenantId).getOrSet(key, async () =>
+			return await this.getScopeCache(modelId, scopeKey).getOrSet(key, async () =>
 				connector.check(modelId, subject, object, action)
 			);
 		} catch (error) {
@@ -712,17 +712,34 @@ export class AuthorizationService implements IAuthorizationComponent {
 	}
 
 	/**
-	 * Get or create the per-tenant, per-model LFU cache.
-	 * @param modelId The model identifier.
-	 * @param tenantId The tenant identifier.
-	 * @returns The LFU cache for the tenant and model.
+	 * Build the scope key partitioning the check cache, from the ambient tenant and
+	 * organization context ids. The organization follows the user organization when present,
+	 * falling back to the deployment organization.
+	 * @returns The scope key string.
 	 * @internal
 	 */
-	private getTenantCache(modelId: string, tenantId: string): LfuCache<boolean> {
-		let modelMap = this._checkCache.get(tenantId);
+	private async getScopeKey(): Promise<string> {
+		const contextIds = await ContextIdStore.getContextIds();
+		const tenantId = contextIds?.[ContextIdKeys.Tenant] ?? "root";
+		const organizationId =
+			contextIds?.[ContextIdKeys.UserOrganization] ??
+			contextIds?.[ContextIdKeys.Organization] ??
+			"*";
+		return `${tenantId}|${organizationId}`;
+	}
+
+	/**
+	 * Get or create the per-scope, per-model LFU cache.
+	 * @param modelId The model identifier.
+	 * @param scopeKey The tenant and organization scope key.
+	 * @returns The LFU cache for the scope and model.
+	 * @internal
+	 */
+	private getScopeCache(modelId: string, scopeKey: string): LfuCache<boolean> {
+		let modelMap = this._checkCache.get(scopeKey);
 		if (Is.empty(modelMap)) {
 			modelMap = new Map<string, LfuCache<boolean>>();
-			this._checkCache.set(tenantId, modelMap);
+			this._checkCache.set(scopeKey, modelMap);
 		}
 		let cache = modelMap.get(modelId);
 		if (Is.empty(cache)) {
@@ -733,15 +750,43 @@ export class AuthorizationService implements IAuthorizationComponent {
 	}
 
 	/**
-	 * Get the per-tenant, per-model LFU cache if it exists.
+	 * Get the existing per-scope, per-model caches a mutation in the current scope can
+	 * affect. A mutation affects its own scope's cache (returned for fine-grained eviction)
+	 * and, because global rules match every scope, a mutation with a global tenant or
+	 * organization dimension also affects every cache along that dimension (returned for
+	 * full eviction).
 	 * @param modelId The model identifier.
-	 * @returns The LFU cache for the tenant and model, or undefined if it doesn't exist.
+	 * @returns The exact-scope cache if it exists and the other affected model cache maps.
 	 * @internal
 	 */
-	private async getModelCache(modelId: string): Promise<LfuCache<boolean> | undefined> {
+	private async getAffectedModelCaches(modelId: string): Promise<{
+		exact?: LfuCache<boolean>;
+		others: Map<string, LfuCache<boolean>>[];
+	}> {
 		const contextIds = await ContextIdStore.getContextIds();
-		const tenantId = contextIds?.[ContextIdKeys.Tenant] ?? "root";
-		return this._checkCache.get(tenantId)?.get(modelId);
+		const tenantId = contextIds?.[ContextIdKeys.Tenant];
+		const organizationId =
+			contextIds?.[ContextIdKeys.UserOrganization] ?? contextIds?.[ContextIdKeys.Organization];
+		const exactKey = await this.getScopeKey();
+
+		let exact: LfuCache<boolean> | undefined;
+		const others: Map<string, LfuCache<boolean>>[] = [];
+		for (const [scopeKey, modelMap] of this._checkCache) {
+			if (scopeKey === exactKey) {
+				exact = modelMap.get(modelId);
+			} else {
+				const separatorIndex = scopeKey.indexOf("|");
+				const scopeTenant = scopeKey.slice(0, separatorIndex);
+				const scopeOrganization = scopeKey.slice(separatorIndex + 1);
+				const tenantAffected = !Is.stringValue(tenantId) || scopeTenant === tenantId;
+				const organizationAffected =
+					!Is.stringValue(organizationId) || scopeOrganization === organizationId;
+				if (tenantAffected && organizationAffected && modelMap.has(modelId)) {
+					others.push(modelMap);
+				}
+			}
+		}
+		return { exact, others };
 	}
 
 	/**
@@ -754,8 +799,12 @@ export class AuthorizationService implements IAuthorizationComponent {
 	 * @internal
 	 */
 	private async invalidateCacheForRoleSubjects(modelId: string, role: string): Promise<void> {
-		const tenantCache = await this.getModelCache(modelId);
-		if (!Is.empty(tenantCache)) {
+		const affected = await this.getAffectedModelCaches(modelId);
+		for (const modelMap of affected.others) {
+			modelMap.delete(modelId);
+		}
+		const scopeCache = affected.exact;
+		if (!Is.empty(scopeCache)) {
 			const connector = this.getConnector();
 			const visited = new Set<string>();
 			const queue = [role];
@@ -765,11 +814,11 @@ export class AuthorizationService implements IAuthorizationComponent {
 				if (!Is.empty(current) && !visited.has(current)) {
 					visited.add(current);
 
-					this.invalidateCacheByPrefix(tenantCache, current);
+					this.invalidateCacheByPrefix(scopeCache, current);
 
 					const subjects = await connector.getSubjectsForRole(modelId, current);
 					for (const subject of subjects) {
-						this.invalidateCacheByPrefix(tenantCache, subject);
+						this.invalidateCacheByPrefix(scopeCache, subject);
 					}
 
 					const children = await connector.getChildRoles(modelId, current);
@@ -790,29 +839,32 @@ export class AuthorizationService implements IAuthorizationComponent {
 	 * @internal
 	 */
 	private async invalidateModelCacheByPrefix(modelId: string, part: string): Promise<void> {
-		const tenantCache = await this.getModelCache(modelId);
-		if (!Is.empty(tenantCache)) {
-			this.invalidateCacheByPrefix(tenantCache, part);
+		const affected = await this.getAffectedModelCaches(modelId);
+		for (const modelMap of affected.others) {
+			modelMap.delete(modelId);
+		}
+		if (!Is.empty(affected.exact)) {
+			this.invalidateCacheByPrefix(affected.exact, part);
 		}
 	}
 
 	/**
 	 * Evict all cached check() results whose key starts with the given subject/role prefix.
-	 * @param tenantCache The resolved LFU cache for the current tenant and model.
+	 * @param scopeCache The resolved LFU cache for the current scope and model.
 	 * @param part The subject or role name to use as the key prefix segment.
 	 * @internal
 	 */
-	private invalidateCacheByPrefix(tenantCache: LfuCache<boolean>, part: string): void {
+	private invalidateCacheByPrefix(scopeCache: LfuCache<boolean>, part: string): void {
 		const prefix = `${part}|`;
-		for (const key of tenantCache.keys()) {
+		for (const key of scopeCache.keys()) {
 			if (key.startsWith(prefix)) {
-				tenantCache.delete(key);
+				scopeCache.delete(key);
 			}
 		}
 	}
 
 	/**
-	 * Evict all cached check() results for the given model across all tenants.
+	 * Evict all cached check() results for the given model across all scopes.
 	 * @param modelId The model identifier.
 	 * @internal
 	 */

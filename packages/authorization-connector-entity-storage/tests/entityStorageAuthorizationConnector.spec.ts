@@ -936,4 +936,174 @@ describe("EntityStorageAuthorizationConnector", () => {
 			expect(tenantBRoles).toEqual(["editor"]);
 		});
 	});
+
+	describe("organization scoping", () => {
+		const ORG_A = "org-a";
+		const ORG_B = "org-b";
+
+		test("a global policy matches under an organization context", async () => {
+			await connector.addPolicy(TEST_MODEL_ID, "alice", "document", "read");
+
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: ORG_A }, async () => {
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toEqual(
+					true
+				);
+			});
+		});
+
+		test("an organization-scoped policy only matches its own organization", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: ORG_A }, async () => {
+				await connector.addPolicy(TEST_MODEL_ID, "alice", "document", "read");
+			});
+
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: ORG_A }, async () => {
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toEqual(
+					true
+				);
+			});
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: ORG_B }, async () => {
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toEqual(
+					false
+				);
+			});
+			await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toEqual(
+				false
+			);
+		});
+
+		test("an organization-scoped role assignment grants access through a global role policy", async () => {
+			await connector.addPolicy(TEST_MODEL_ID, "editor", "document", "write");
+			await connector.addRoleInheritance(TEST_MODEL_ID, "admin", "editor");
+
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: ORG_A }, async () => {
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "admin");
+			});
+
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: ORG_A }, async () => {
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "write")).resolves.toEqual(
+					true
+				);
+			});
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: ORG_B }, async () => {
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "write")).resolves.toEqual(
+					false
+				);
+			});
+		});
+
+		test("removal under an organization context does not remove the global rule", async () => {
+			await connector.addPolicy(TEST_MODEL_ID, "alice", "document", "read");
+
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: ORG_A }, async () => {
+				await connector.removePolicy(TEST_MODEL_ID, "alice", "document", "read");
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toEqual(
+					true
+				);
+			});
+		});
+
+		test("the user organization context id takes precedence over the organization context id", async () => {
+			await ContextIdStore.run(
+				{ [ContextIdKeys.Organization]: ORG_B, [ContextIdKeys.UserOrganization]: ORG_A },
+				async () => {
+					await connector.addPolicy(TEST_MODEL_ID, "alice", "document", "read");
+				}
+			);
+
+			await ContextIdStore.run({ [ContextIdKeys.UserOrganization]: ORG_A }, async () => {
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toEqual(
+					true
+				);
+			});
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: ORG_B }, async () => {
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toEqual(
+					false
+				);
+			});
+		});
+
+		test("a global rule can be migrated to per-organization rules", async () => {
+			await connector.addPolicy(TEST_MODEL_ID, "editor", "document", "write");
+
+			for (const org of [ORG_A, ORG_B]) {
+				await ContextIdStore.run({ [ContextIdKeys.Organization]: org }, async () => {
+					await connector.addPolicy(TEST_MODEL_ID, "editor", "document", "write");
+				});
+			}
+			await connector.removePolicy(TEST_MODEL_ID, "editor", "document", "write");
+
+			for (const org of [ORG_A, ORG_B]) {
+				await ContextIdStore.run({ [ContextIdKeys.Organization]: org }, async () => {
+					await expect(
+						connector.check(TEST_MODEL_ID, "editor", "document", "write")
+					).resolves.toEqual(true);
+				});
+			}
+			await expect(connector.check(TEST_MODEL_ID, "editor", "document", "write")).resolves.toEqual(
+				false
+			);
+
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: ORG_B }, async () => {
+				await connector.removePolicy(TEST_MODEL_ID, "editor", "document", "write");
+				await expect(
+					connector.check(TEST_MODEL_ID, "editor", "document", "write")
+				).resolves.toEqual(false);
+			});
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: ORG_A }, async () => {
+				await expect(
+					connector.check(TEST_MODEL_ID, "editor", "document", "write")
+				).resolves.toEqual(true);
+			});
+		});
+
+		test("getAllPolicies reports the organization and hides other organizations", async () => {
+			await connector.addPolicy(TEST_MODEL_ID, "alice", "document", "read");
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: ORG_A }, async () => {
+				await connector.addPolicy(TEST_MODEL_ID, "alice", "document", "write");
+			});
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: ORG_B }, async () => {
+				await connector.addPolicy(TEST_MODEL_ID, "alice", "document", "delete");
+			});
+
+			const orgAPolicies = await ContextIdStore.run(
+				{ [ContextIdKeys.Organization]: ORG_A },
+				async () => connector.getAllPolicies(TEST_MODEL_ID)
+			);
+			expect(orgAPolicies.entities).toEqual([
+				{ subject: "alice", object: "document", action: "read" },
+				{ subject: "alice", object: "document", action: "write", organization: ORG_A }
+			]);
+
+			const globalPolicies = await connector.getAllPolicies(TEST_MODEL_ID);
+			expect(globalPolicies.entities).toEqual([
+				{ subject: "alice", object: "document", action: "read" }
+			]);
+		});
+
+		test("hasRoleForSubject sees a global assignment from an organization context", async () => {
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "admin");
+
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: ORG_A }, async () => {
+				await expect(connector.hasRoleForSubject(TEST_MODEL_ID, "alice", "admin")).resolves.toEqual(
+					true
+				);
+			});
+		});
+
+		test("getRolesForSubject merges global and organization-scoped assignments", async () => {
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "viewer");
+			await ContextIdStore.run({ [ContextIdKeys.Organization]: ORG_A }, async () => {
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "admin");
+			});
+
+			const orgARoles = await ContextIdStore.run(
+				{ [ContextIdKeys.Organization]: ORG_A },
+				async () => connector.getRolesForSubject(TEST_MODEL_ID, "alice")
+			);
+			expect(orgARoles.sort()).toEqual(["admin", "viewer"]);
+
+			const globalRoles = await connector.getRolesForSubject(TEST_MODEL_ID, "alice");
+			expect(globalRoles).toEqual(["viewer"]);
+		});
+	});
 });

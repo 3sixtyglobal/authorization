@@ -8,7 +8,8 @@ import { entity, property } from "@twin.org/entity";
 @entity()
 export class AuthorizationPolicy {
 	/**
-	 * The compound identifier for this policy rule, in "modelId|subject|object|action" format.
+	 * The compound identifier for this policy rule, in
+	 * "modelId|organization|subject|object|action" format.
 	 */
 	@property({ type: "string", isPrimary: true })
 	public id!: string;
@@ -36,4 +37,10 @@ export class AuthorizationPolicy {
 	 */
 	@property({ type: "string" })
 	public action!: string;
+
+	/**
+	 * The organization the policy is scoped to, "*" for a global policy.
+	 */
+	@property({ type: "string", isSecondary: true })
+	public organization!: string;
 }

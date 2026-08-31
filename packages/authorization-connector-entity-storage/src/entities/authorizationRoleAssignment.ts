@@ -8,7 +8,8 @@ import { entity, property } from "@twin.org/entity";
 @entity()
 export class AuthorizationRoleAssignment {
 	/**
-	 * The compound identifier for this role assignment, in "modelId|subject|role" format.
+	 * The compound identifier for this role assignment, in
+	 * "modelId|organization|subject|role" format.
 	 */
 	@property({ type: "string", isPrimary: true })
 	public id!: string;
@@ -30,4 +31,10 @@ export class AuthorizationRoleAssignment {
 	 */
 	@property({ type: "string", isSecondary: true })
 	public role!: string;
+
+	/**
+	 * The organization the assignment is scoped to, "*" for a global assignment.
+	 */
+	@property({ type: "string", isSecondary: true })
+	public organization!: string;
 }
