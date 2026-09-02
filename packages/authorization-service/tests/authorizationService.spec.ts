@@ -875,6 +875,37 @@ describe("AuthorizationService", () => {
 		});
 	});
 
+	describe("removeAllRolesForSubject escalation guard", () => {
+		test("denies removing the escalated privilege role from another subject", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await connector.addRoleForSubject(
+				TEST_MODEL_ID,
+				"user-global-admin",
+				AuthorizationService.DEFAULT_ESCALATED_PRIVILEGE_ROLE
+			);
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+				await expect(
+					service.removeAllRolesForSubject(TEST_MODEL_ID, "user-global-admin")
+				).rejects.toThrow();
+			});
+		});
+	});
+
+	describe("escalated privilege role assignment guard", () => {
+		test("denies a role-less caller granting the escalated privilege role", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-proxy" }, async () => {
+				await expect(
+					service.addRoleForSubject(
+						TEST_MODEL_ID,
+						"user-admin",
+						AuthorizationService.DEFAULT_ESCALATED_PRIVILEGE_ROLE
+					)
+				).rejects.toThrow();
+			});
+		});
+	});
+
 	describe("removeRoleInheritance escalation guard", () => {
 		test("allows removing inheritance where the child role is not in the forbidden set", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });

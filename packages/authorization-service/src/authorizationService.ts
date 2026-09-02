@@ -434,7 +434,7 @@ export class AuthorizationService implements IAuthorizationComponent {
 		this.guardNoSeparator(nameof(role), role);
 
 		const connector = this.getConnector();
-		await this.guardCallerEscalation(modelId, connector, "escalationDenied", role);
+		await this.guardCallerEscalation(modelId, connector, "escalationDenied", [role]);
 
 		try {
 			await connector.addRoleForSubject(modelId, subject, role);
@@ -474,7 +474,7 @@ export class AuthorizationService implements IAuthorizationComponent {
 		this.guardNoSeparator(nameof(role), role);
 
 		const connector = this.getConnector();
-		await this.guardCallerEscalation(modelId, connector, "escalationDenied", role);
+		await this.guardCallerEscalation(modelId, connector, "escalationDenied", [role]);
 
 		try {
 			await connector.removeRoleForSubject(modelId, subject, role);
@@ -511,8 +511,11 @@ export class AuthorizationService implements IAuthorizationComponent {
 		this.guardNoSeparator(nameof(modelId), modelId);
 		this.guardNoSeparator(nameof(subject), subject);
 
+		const connector = this.getConnector();
+		const roles = await connector.getRolesForSubject(modelId, subject);
+		await this.guardCallerEscalation(modelId, connector, "escalationDenied", roles);
+
 		try {
-			const connector = this.getConnector();
 			await connector.removeAllRolesForSubject(modelId, subject);
 			await this.invalidateModelCacheByPrefix(modelId, subject);
 			await this._loggingComponent?.log({
@@ -625,7 +628,7 @@ export class AuthorizationService implements IAuthorizationComponent {
 		this.guardNoSeparator(nameof(inheritsFrom), inheritsFrom);
 
 		const connector = this.getConnector();
-		await this.guardCallerEscalation(modelId, connector, "escalationDenied", role, inheritsFrom);
+		await this.guardCallerEscalation(modelId, connector, "escalationDenied", [role, inheritsFrom]);
 
 		try {
 			await connector.addRoleInheritance(modelId, role, inheritsFrom);
@@ -669,7 +672,7 @@ export class AuthorizationService implements IAuthorizationComponent {
 		this.guardNoSeparator(nameof(inheritsFrom), inheritsFrom);
 
 		const connector = this.getConnector();
-		await this.guardCallerEscalation(modelId, connector, "escalationDenied", role);
+		await this.guardCallerEscalation(modelId, connector, "escalationDenied", [role]);
 
 		try {
 			await connector.removeRoleInheritance(modelId, role, inheritsFrom);
@@ -910,7 +913,7 @@ export class AuthorizationService implements IAuthorizationComponent {
 		modelId: string,
 		connector: IAuthorizationConnector,
 		errorKey: string,
-		...roles: string[]
+		roles: string[]
 	): Promise<void> {
 		const contextIds = await ContextIdStore.getContextIds();
 		const callerId = contextIds?.[ContextIdKeys.User];
@@ -952,9 +955,8 @@ export class AuthorizationService implements IAuthorizationComponent {
 	}
 
 	/**
-	 * BFS over getChildRoles to build the set of all roles more privileged than the caller.
-	 * These are the descendants of the caller's direct roles — roles the caller must not be able
-	 * to grant or assign to themselves via any mutation operation.
+	 * BFS over getChildRoles to build the set of roles the caller must not mutate. The set includes
+	 * all roles more privileged than the caller and the escalated-privilege role with its descendants.
 	 * @param modelId The model identifier.
 	 * @param connector The authorization connector.
 	 * @param callerId The calling user identifier.
@@ -967,9 +969,9 @@ export class AuthorizationService implements IAuthorizationComponent {
 		callerId: string
 	): Promise<Set<string>> {
 		const callerRoles = await connector.getRolesForSubject(modelId, callerId);
-		const forbidden = new Set<string>();
-		const visited = new Set<string>(callerRoles);
-		const queue = [...callerRoles];
+		const forbidden = new Set<string>([this._escalatedPrivilegeRole]);
+		const visited = new Set<string>([...callerRoles, this._escalatedPrivilegeRole]);
+		const queue = [...callerRoles, this._escalatedPrivilegeRole];
 		while (queue.length > 0) {
 			const current = queue.shift();
 			if (!Is.empty(current)) {
