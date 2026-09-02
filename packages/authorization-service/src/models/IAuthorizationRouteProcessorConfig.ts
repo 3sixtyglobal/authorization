@@ -12,7 +12,7 @@ export interface IAuthorizationRouteProcessorConfig {
 
 	/**
 	 * The model identifier to use when checking route authorization.
-	 * @default rest.
+	 * @default system.
 	 */
 	authorizationModelId?: string;
 }
