@@ -47,36 +47,6 @@ describe("CasbinAuthorizationConnector (casbin-specific)", () => {
 		await cleanup();
 	});
 
-	describe("getAllRoles", () => {
-		test("lone addRoleInheritance reports only the parent role until the child is also assigned to a subject", async () => {
-			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
-				await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
-				const { roles: rolesAfterInheritance } = await connector.getAllRoles(TEST_MODEL_ID);
-				expect(rolesAfterInheritance).toContain("viewer");
-				expect(rolesAfterInheritance).not.toContain("editor");
-
-				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
-				const { roles: rolesAfterAssignment } = await connector.getAllRoles(TEST_MODEL_ID);
-				expect(rolesAfterAssignment).toContain("editor");
-				expect(rolesAfterAssignment).toContain("viewer");
-			});
-		});
-	});
-
-	describe("hasRoles", () => {
-		test("returns true only for the parent role from a lone inheritance until the child is assigned to a subject", async () => {
-			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
-				await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
-				const resultBefore = await connector.hasRoles(TEST_MODEL_ID, ["editor", "viewer"]);
-				expect(resultBefore).toEqual([false, true]);
-
-				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
-				const resultAfter = await connector.hasRoles(TEST_MODEL_ID, ["editor", "viewer"]);
-				expect(resultAfter).toEqual([true, true]);
-			});
-		});
-	});
-
 	describe("error propagation", () => {
 		let badConnector: CasbinAuthorizationConnector;
 

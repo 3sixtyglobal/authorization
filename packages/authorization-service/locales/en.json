@@ -33,7 +33,8 @@
 			"getChildRolesFailed": "The retrieval of child roles failed",
 			"buildFailed": "The build of the authorization model failed",
 			"containsSeparator": "The field \"{fieldName}\" must not contain the \"|\" separator character.",
-			"roleEscalationDenied": "You cannot grant a role that sits at a higher level in the role hierarchy than your own roles."
+			"escalationDenied": "This operation is not permitted as it would result in privilege escalation.",
+			"systemModelBuildDenied": "The system model can only be built by a system process."
 		},
 		"authorizationRouteProcessor": {
 			"routeIdMissing": "The route ID is missing",

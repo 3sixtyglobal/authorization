@@ -453,7 +453,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 					const entity = await this._authorizationRoleNameEntityStorage.get(
 						this.roleNameId(modelId, role)
 					);
-					return entity !== undefined;
+					return Is.notEmpty(entity);
 				})
 			);
 		} catch (err) {
@@ -734,17 +734,12 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 			inheritance.role = role;
 			inheritance.inheritsFrom = inheritsFrom;
 			inheritance.organization = organization;
-			const roleNameEntity = new AuthorizationRoleName();
-			roleNameEntity.id = this.roleNameId(modelId, role);
-			roleNameEntity.modelId = modelId;
-			roleNameEntity.name = role;
 			const inheritsFromNameEntity = new AuthorizationRoleName();
 			inheritsFromNameEntity.id = this.roleNameId(modelId, inheritsFrom);
 			inheritsFromNameEntity.modelId = modelId;
 			inheritsFromNameEntity.name = inheritsFrom;
 			await Promise.all([
 				this._authorizationRoleInheritanceEntityStorage.set(inheritance),
-				this._authorizationRoleNameEntityStorage.set(roleNameEntity),
 				this._authorizationRoleNameEntityStorage.set(inheritsFromNameEntity)
 			]);
 		} catch (err) {

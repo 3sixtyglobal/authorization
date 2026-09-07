@@ -25,7 +25,7 @@ import { AuthorizationRouteProcessor } from "../src/processors/authorizationRout
 
 const TEST_NAMESPACE = "test-es";
 const COMPONENT_TYPE = "authorization";
-const TEST_MODEL_ID = "rest";
+const TEST_MODEL_ID = "system";
 
 describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 	let policyStorage: MemoryEntityStorageConnector<AuthorizationPolicy>;
@@ -443,15 +443,15 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 			});
 		});
 
-		test("denies caller granting a role they hold only via inheritance, not directly", async () => {
-			await service.addRoleInheritance(MODEL_ID, "global-admin", "editor");
-			await service.addRoleForSubject(MODEL_ID, "user-admin", "global-admin");
+		test("denies caller granting a descendant role they do not directly hold", async () => {
+			await service.addRoleInheritance(MODEL_ID, "super-admin", "tenant-admin");
+			await service.addRoleForSubject(MODEL_ID, "user-admin", "tenant-admin");
 
 			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
 				await expect(
 					authorizationAddRoleForSubject(HTTP_CTX, COMPONENT_TYPE, {
 						pathParams: { modelId: MODEL_ID, subject: "user-bob" },
-						body: { role: "editor" }
+						body: { role: "super-admin" }
 					})
 				).rejects.toThrow();
 			});
@@ -470,15 +470,15 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 			});
 		});
 
-		test("denies caller granting a role that is an ancestor of their role", async () => {
-			await service.addRoleInheritance(MODEL_ID, "editor", "viewer");
+		test("denies caller granting a descendant role of their role", async () => {
+			await service.addRoleInheritance(MODEL_ID, "super-editor", "editor");
 			await service.addRoleForSubject(MODEL_ID, "user-admin", "editor");
 
 			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
 				await expect(
 					authorizationAddRoleForSubject(HTTP_CTX, COMPONENT_TYPE, {
 						pathParams: { modelId: MODEL_ID, subject: "user-bob" },
-						body: { role: "viewer" }
+						body: { role: "super-editor" }
 					})
 				).rejects.toThrow();
 			});

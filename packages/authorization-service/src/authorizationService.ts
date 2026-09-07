@@ -33,6 +33,16 @@ export class AuthorizationService implements IAuthorizationComponent {
 	public static readonly CLASS_NAME: string = nameof<AuthorizationService>();
 
 	/**
+	 * The model identifier that is reserved for system-only use.
+	 */
+	public static readonly DEFAULT_AUTHORIZATION_MODEL_ID: string = "system";
+
+	/**
+	 * The role that bypasses all escalation guards when held by the caller.
+	 */
+	public static readonly DEFAULT_ESCALATED_PRIVILEGE_ROLE: string = "global-admin";
+
+	/**
 	 * The default namespace for the connector to use.
 	 * @internal
 	 */
@@ -49,6 +59,18 @@ export class AuthorizationService implements IAuthorizationComponent {
 	 * @internal
 	 */
 	private readonly _telemetryComponent?: ITelemetryComponent;
+
+	/**
+	 * The model identifier reserved for system-only builds.
+	 * @internal
+	 */
+	private readonly _authorizationModelId: string | undefined;
+
+	/**
+	 * The role that grants the holder unrestricted access to all mutation operations.
+	 * @internal
+	 */
+	private readonly _escalatedPrivilegeRole: string;
 
 	/**
 	 * LFU cache config used when creating per-model check() caches.
@@ -83,6 +105,11 @@ export class AuthorizationService implements IAuthorizationComponent {
 		);
 
 		this._defaultNamespace = options?.config?.defaultNamespace ?? names[0];
+		this._authorizationModelId =
+			options?.config?.authorizationModelId ?? AuthorizationService.DEFAULT_AUTHORIZATION_MODEL_ID;
+		this._escalatedPrivilegeRole =
+			options?.config?.escalatedPrivilegeRole ??
+			AuthorizationService.DEFAULT_ESCALATED_PRIVILEGE_ROLE;
 
 		this._checkCacheConfig = {
 			capacity: options?.config?.checkCacheCapacity,
@@ -117,9 +144,41 @@ export class AuthorizationService implements IAuthorizationComponent {
 	 */
 	public async build(modelId: string, model: IAuthorizationModel): Promise<void> {
 		this.guardNoSeparator(nameof(modelId), modelId);
+		const connector = this.getConnector();
+		const contextIds = await ContextIdStore.getContextIds();
+		const callerId = contextIds?.[ContextIdKeys.User];
+
+		if (
+			Is.stringValue(callerId) &&
+			!(await this.isCallerEscalatedPrivilege(modelId, connector, callerId))
+		) {
+			if (Is.stringValue(this._authorizationModelId) && modelId === this._authorizationModelId) {
+				throw new UnauthorizedError(AuthorizationService.CLASS_NAME, "systemModelBuildDenied");
+			}
+			const { entities } = await connector.getAllPolicies(modelId, undefined, undefined, 1);
+			if (entities.length > 0) {
+				const allowed = await connector.check(modelId, callerId, "authorization", "build");
+				if (!allowed) {
+					throw new UnauthorizedError(AuthorizationService.CLASS_NAME, "escalationDenied");
+				}
+			}
+			const hasBuildPolicy =
+				model.policies?.some(
+					(p: IAuthorizationPolicy) =>
+						p.subject === callerId && p.object === "authorization" && p.action === "build"
+				) ?? false;
+			if (!hasBuildPolicy) {
+				model = {
+					...model,
+					policies: [
+						...(model.policies ?? []),
+						{ subject: callerId, object: "authorization", action: "build" }
+					]
+				};
+			}
+		}
 
 		try {
-			const connector = this.getConnector();
 			await connector.build(modelId, model);
 			this.invalidateCacheForModel(modelId);
 			await this._loggingComponent?.log({
@@ -184,8 +243,10 @@ export class AuthorizationService implements IAuthorizationComponent {
 		this.guardNoSeparator(nameof(object), object);
 		this.guardNoSeparator(nameof(action), action);
 
+		const connector = this.getConnector();
+		await this.guardCallerPolicyEscalation(modelId, connector, subject);
+
 		try {
-			const connector = this.getConnector();
 			await connector.addPolicy(modelId, subject, object, action);
 			await this.invalidateCacheForRoleSubjects(modelId, subject);
 			await this._loggingComponent?.log({
@@ -372,32 +433,8 @@ export class AuthorizationService implements IAuthorizationComponent {
 		this.guardNoSeparator(nameof(subject), subject);
 		this.guardNoSeparator(nameof(role), role);
 
-		const contextIds = await ContextIdStore.getContextIds();
-		const callerId = contextIds?.[ContextIdKeys.User];
 		const connector = this.getConnector();
-
-		if (Is.stringValue(callerId)) {
-			const callerRoles = await connector.getRolesForSubject(modelId, callerId);
-			const forbidden = new Set<string>();
-			const visited = new Set<string>(callerRoles);
-			const queue = [...callerRoles];
-			while (queue.length > 0) {
-				const current = queue.shift();
-				if (!Is.empty(current)) {
-					const parents = await connector.getParentRoles(modelId, current);
-					for (const parent of parents) {
-						if (!visited.has(parent)) {
-							visited.add(parent);
-							forbidden.add(parent);
-							queue.push(parent);
-						}
-					}
-				}
-			}
-			if (forbidden.has(role)) {
-				throw new UnauthorizedError(AuthorizationService.CLASS_NAME, "roleEscalationDenied");
-			}
-		}
+		await this.guardCallerEscalation(modelId, connector, "escalationDenied", [role]);
 
 		try {
 			await connector.addRoleForSubject(modelId, subject, role);
@@ -436,8 +473,10 @@ export class AuthorizationService implements IAuthorizationComponent {
 		this.guardNoSeparator(nameof(subject), subject);
 		this.guardNoSeparator(nameof(role), role);
 
+		const connector = this.getConnector();
+		await this.guardCallerEscalation(modelId, connector, "escalationDenied", [role]);
+
 		try {
-			const connector = this.getConnector();
 			await connector.removeRoleForSubject(modelId, subject, role);
 			await this.invalidateModelCacheByPrefix(modelId, subject);
 			await this._loggingComponent?.log({
@@ -472,8 +511,11 @@ export class AuthorizationService implements IAuthorizationComponent {
 		this.guardNoSeparator(nameof(modelId), modelId);
 		this.guardNoSeparator(nameof(subject), subject);
 
+		const connector = this.getConnector();
+		const roles = await connector.getRolesForSubject(modelId, subject);
+		await this.guardCallerEscalation(modelId, connector, "escalationDenied", roles);
+
 		try {
-			const connector = this.getConnector();
 			await connector.removeAllRolesForSubject(modelId, subject);
 			await this.invalidateModelCacheByPrefix(modelId, subject);
 			await this._loggingComponent?.log({
@@ -585,8 +627,10 @@ export class AuthorizationService implements IAuthorizationComponent {
 		this.guardNoSeparator(nameof(role), role);
 		this.guardNoSeparator(nameof(inheritsFrom), inheritsFrom);
 
+		const connector = this.getConnector();
+		await this.guardCallerEscalation(modelId, connector, "escalationDenied", [role, inheritsFrom]);
+
 		try {
-			const connector = this.getConnector();
 			await connector.addRoleInheritance(modelId, role, inheritsFrom);
 			await this.invalidateCacheForRoleSubjects(modelId, role);
 			await this._loggingComponent?.log({
@@ -627,8 +671,10 @@ export class AuthorizationService implements IAuthorizationComponent {
 		this.guardNoSeparator(nameof(role), role);
 		this.guardNoSeparator(nameof(inheritsFrom), inheritsFrom);
 
+		const connector = this.getConnector();
+		await this.guardCallerEscalation(modelId, connector, "escalationDenied", [role]);
+
 		try {
-			const connector = this.getConnector();
 			await connector.removeRoleInheritance(modelId, role, inheritsFrom);
 			await this.invalidateCacheForRoleSubjects(modelId, role);
 			await this._loggingComponent?.log({
@@ -886,6 +932,145 @@ export class AuthorizationService implements IAuthorizationComponent {
 		if (value.includes("|")) {
 			throw new GeneralError(AuthorizationService.CLASS_NAME, "containsSeparator", { fieldName });
 		}
+	}
+
+	/**
+	 * Returns true when the caller holds the configured escalated-privilege role in the given model,
+	 * granting them unrestricted access to all mutation operations.
+	 * @param modelId The model identifier.
+	 * @param connector The authorization connector.
+	 * @param callerId The caller's user identifier.
+	 * @returns True if the caller holds the escalated-privilege role.
+	 * @internal
+	 */
+	private async isCallerEscalatedPrivilege(
+		modelId: string,
+		connector: IAuthorizationConnector,
+		callerId: string
+	): Promise<boolean> {
+		const callerRoles = await connector.getRolesForSubject(modelId, callerId);
+		return callerRoles.includes(this._escalatedPrivilegeRole);
+	}
+
+	/**
+	 * Deny the caller if any of the supplied role names are in their forbidden (descendant) set.
+	 * No-ops when there is no user in the request context (system-level call).
+	 * @param modelId The model identifier.
+	 * @param connector The authorization connector.
+	 * @param errorKey The locale error key to throw on denial.
+	 * @param roles One or more role names to check.
+	 * @internal
+	 */
+	private async guardCallerEscalation(
+		modelId: string,
+		connector: IAuthorizationConnector,
+		errorKey: string,
+		roles: string[]
+	): Promise<void> {
+		const contextIds = await ContextIdStore.getContextIds();
+		const callerId = contextIds?.[ContextIdKeys.User];
+		if (Is.stringValue(callerId)) {
+			if (await this.isCallerEscalatedPrivilege(modelId, connector, callerId)) {
+				return;
+			}
+			const forbidden = await this.buildCallerForbiddenSet(modelId, connector, callerId);
+			if (roles.some(r => forbidden.has(r))) {
+				throw new UnauthorizedError(AuthorizationService.CLASS_NAME, errorKey);
+			}
+		}
+	}
+
+	/**
+	 * Deny the caller if the policy subject is their own user ID or any role they hold or
+	 * inherit from. No-ops when there is no user in the request context (system-level call).
+	 * @param modelId The model identifier.
+	 * @param connector The authorization connector.
+	 * @param subject The policy subject to check.
+	 * @internal
+	 */
+	private async guardCallerPolicyEscalation(
+		modelId: string,
+		connector: IAuthorizationConnector,
+		subject: string
+	): Promise<void> {
+		const contextIds = await ContextIdStore.getContextIds();
+		const callerId = contextIds?.[ContextIdKeys.User];
+		if (Is.stringValue(callerId)) {
+			if (await this.isCallerEscalatedPrivilege(modelId, connector, callerId)) {
+				return;
+			}
+			const affected = await this.buildCallerAffectedSet(modelId, connector, callerId);
+			if (subject === callerId || affected.has(subject)) {
+				throw new UnauthorizedError(AuthorizationService.CLASS_NAME, "escalationDenied");
+			}
+		}
+	}
+
+	/**
+	 * BFS over getChildRoles to build the set of roles the caller must not mutate. The set includes
+	 * all roles more privileged than the caller and the escalated-privilege role with its descendants.
+	 * @param modelId The model identifier.
+	 * @param connector The authorization connector.
+	 * @param callerId The calling user identifier.
+	 * @returns The forbidden (descendant) role set.
+	 * @internal
+	 */
+	private async buildCallerForbiddenSet(
+		modelId: string,
+		connector: IAuthorizationConnector,
+		callerId: string
+	): Promise<Set<string>> {
+		const callerRoles = await connector.getRolesForSubject(modelId, callerId);
+		const forbidden = new Set<string>([this._escalatedPrivilegeRole]);
+		const visited = new Set<string>([...callerRoles, this._escalatedPrivilegeRole]);
+		const queue = [...callerRoles, this._escalatedPrivilegeRole];
+		while (queue.length > 0) {
+			const current = queue.shift();
+			if (!Is.empty(current)) {
+				const children = await connector.getChildRoles(modelId, current);
+				for (const child of children) {
+					if (!visited.has(child)) {
+						visited.add(child);
+						forbidden.add(child);
+						queue.push(child);
+					}
+				}
+			}
+		}
+		return forbidden;
+	}
+
+	/**
+	 * BFS over getParentRoles to build the set of all roles the caller directly holds or
+	 * transitively inherits from. Adding a policy for any role in this set would grant the
+	 * caller new permissions.
+	 * @param modelId The model identifier.
+	 * @param connector The authorization connector.
+	 * @param callerId The calling user identifier.
+	 * @returns The affected (direct + ancestor) role set.
+	 * @internal
+	 */
+	private async buildCallerAffectedSet(
+		modelId: string,
+		connector: IAuthorizationConnector,
+		callerId: string
+	): Promise<Set<string>> {
+		const callerRoles = await connector.getRolesForSubject(modelId, callerId);
+		const affected = new Set<string>(callerRoles);
+		const queue = [...callerRoles];
+		while (queue.length > 0) {
+			const current = queue.shift();
+			if (!Is.empty(current)) {
+				const parents = await connector.getParentRoles(modelId, current);
+				for (const parent of parents) {
+					if (!affected.has(parent)) {
+						affected.add(parent);
+						queue.push(parent);
+					}
+				}
+			}
+		}
+		return affected;
 	}
 
 	/**

@@ -11,6 +11,10 @@ import type { AuthorizationRoleName } from "../src/entities/authorizationRoleNam
 import { EntityStorageAuthorizationConnector } from "../src/entityStorageAuthorizationConnector.js";
 import { initSchema } from "../src/schema.js";
 
+// This suite must be kept in sync with casbinAuthorizationConnector.spec.ts.
+// Both connector implementations share the same contract; any test added, removed, or renamed
+// in one file should be reflected in the other.
+
 const TEST_TENANT_ID_A = "test-tenant-a";
 const TEST_TENANT_ID_B = "test-tenant-b";
 const TEST_MODEL_ID = "test-model";
@@ -643,7 +647,19 @@ describe("EntityStorageAuthorizationConnector", () => {
 			expect(roles).toEqual(["admin", "editor", "viewer"]);
 		});
 
-		test("role is removed from index when last assignment is removed", async () => {
+		test("lone addRoleInheritance reports only the parent role until the child is also assigned to a subject", async () => {
+			await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
+			const { roles: rolesAfterInheritance } = await connector.getAllRoles(TEST_MODEL_ID);
+			expect(rolesAfterInheritance).toContain("viewer");
+			expect(rolesAfterInheritance).not.toContain("editor");
+
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
+			const { roles: rolesAfterAssignment } = await connector.getAllRoles(TEST_MODEL_ID);
+			expect(rolesAfterAssignment).toContain("editor");
+			expect(rolesAfterAssignment).toContain("viewer");
+		});
+
+		test("role is removed when its last assignment is removed", async () => {
 			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "admin");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "bob", "admin");
 			await connector.removeRoleForSubject(TEST_MODEL_ID, "alice", "admin");
@@ -654,7 +670,7 @@ describe("EntityStorageAuthorizationConnector", () => {
 			expect(roles2).not.toContain("admin");
 		});
 
-		test("role kept in index when still referenced by inheritance after assignment removed", async () => {
+		test("role is kept when still referenced by inheritance after assignment is removed", async () => {
 			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
 			await connector.addRoleInheritance(TEST_MODEL_ID, "admin", "editor");
 			await connector.removeRoleForSubject(TEST_MODEL_ID, "alice", "editor");
@@ -662,7 +678,7 @@ describe("EntityStorageAuthorizationConnector", () => {
 			expect(roles).toContain("editor");
 		});
 
-		test("role removed from index when all assignments and inheritance removed", async () => {
+		test("role is removed when all assignments and inheritances are removed", async () => {
 			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
 			await connector.addRoleInheritance(TEST_MODEL_ID, "admin", "editor");
 			await connector.removeRoleForSubject(TEST_MODEL_ID, "alice", "editor");
@@ -671,7 +687,7 @@ describe("EntityStorageAuthorizationConnector", () => {
 			expect(roles).not.toContain("editor");
 		});
 
-		test("removeAllRolesForSubject cleans up unreferenced role names", async () => {
+		test("role removed by removeAllRolesForSubject is no longer listed", async () => {
 			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "admin");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "bob", "editor");
@@ -699,10 +715,10 @@ describe("EntityStorageAuthorizationConnector", () => {
 			expect(result).toEqual([true]);
 		});
 
-		test("returns true for a role added via addRoleInheritance", async () => {
+		test("returns true only for the parent role from a lone addRoleInheritance", async () => {
 			await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
 			const result = await connector.hasRoles(TEST_MODEL_ID, ["editor", "viewer"]);
-			expect(result).toEqual([true, true]);
+			expect(result).toEqual([false, true]);
 		});
 
 		test("returns results in input order with mixed existing and missing roles", async () => {
@@ -716,6 +732,10 @@ describe("EntityStorageAuthorizationConnector", () => {
 			await connector.removeRoleForSubject(TEST_MODEL_ID, "alice", "temp");
 			const result = await connector.hasRoles(TEST_MODEL_ID, ["temp"]);
 			expect(result).toEqual([false]);
+		});
+
+		test("throws when modelId is empty", async () => {
+			await expect(connector.hasRoles("", ["admin"])).rejects.toThrow();
 		});
 	});
 
@@ -934,6 +954,20 @@ describe("EntityStorageAuthorizationConnector", () => {
 				}
 			);
 			expect(tenantBRoles).toEqual(["editor"]);
+		});
+
+		test("each tenant has independent role inheritance", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				await tenantConnector.addPolicy(TEST_MODEL_ID, "viewer", "/page", "read");
+				await tenantConnector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
+				await tenantConnector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
+			});
+
+			const deniedInB = await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: TEST_TENANT_ID_B },
+				async () => tenantConnector.check(TEST_MODEL_ID, "alice", "/page", "read")
+			);
+			expect(deniedInB).toBe(false);
 		});
 	});
 

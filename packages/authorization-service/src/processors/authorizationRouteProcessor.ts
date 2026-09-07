@@ -24,6 +24,11 @@ export class AuthorizationRouteProcessor implements IBaseRouteProcessor {
 	public static readonly CLASS_NAME: string = nameof<AuthorizationRouteProcessor>();
 
 	/**
+	 * The model identifier that is reserved for system-only use.
+	 */
+	public static readonly DEFAULT_AUTHORIZATION_MODEL_ID: string = "system";
+
+	/**
 	 * The authorization component.
 	 * @internal
 	 */
@@ -49,7 +54,9 @@ export class AuthorizationRouteProcessor implements IBaseRouteProcessor {
 		this._authorizationComponent = ComponentFactory.get(
 			options?.authorizationComponentType ?? "authorization"
 		);
-		this._authorizationModelId = options?.config?.authorizationModelId ?? "rest";
+		this._authorizationModelId =
+			options?.config?.authorizationModelId ??
+			AuthorizationRouteProcessor.DEFAULT_AUTHORIZATION_MODEL_ID;
 		this._includeErrorStack = options?.config?.includeErrorStack ?? false;
 	}
 
