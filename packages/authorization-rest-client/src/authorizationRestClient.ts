@@ -27,7 +27,7 @@ import type {
 	IAuthorizationGetSubjectsForRoleResponse,
 	IAuthorizationHasRoleForSubjectRequest,
 	IAuthorizationHasRoleForSubjectResponse,
-	IAuthorizationPolicy,
+	IAuthorizationScopedPolicy,
 	IAuthorizationBuildRequest,
 	IAuthorizationModel,
 	IAuthorizationRemoveAllRolesForSubjectRequest,
@@ -172,7 +172,7 @@ export class AuthorizationRestClient extends BaseRestClient implements IAuthoriz
 		subject: string,
 		cursor?: string,
 		limit?: number
-	): Promise<{ entities: IAuthorizationPolicy[]; cursor?: string }> {
+	): Promise<{ entities: IAuthorizationScopedPolicy[]; cursor?: string }> {
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(modelId), modelId);
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(subject), subject);
 
@@ -200,7 +200,7 @@ export class AuthorizationRestClient extends BaseRestClient implements IAuthoriz
 		subject?: string,
 		cursor?: string,
 		limit?: number
-	): Promise<{ entities: IAuthorizationPolicy[]; cursor?: string }> {
+	): Promise<{ entities: IAuthorizationScopedPolicy[]; cursor?: string }> {
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(modelId), modelId);
 
 		const response = await this.fetch<

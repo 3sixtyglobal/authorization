@@ -1,6 +1,6 @@
 // Copyright 2026 IOTA Stiftung.
 // SPDX-License-Identifier: Apache-2.0.
-import type { IAuthorizationPolicy } from "../IAuthorizationPolicy.js";
+import type { IAuthorizationScopedPolicy } from "../IAuthorizationScopedPolicy.js";
 
 /**
  * Response for getting all authorization policies.
@@ -13,7 +13,7 @@ export interface IAuthorizationGetAllPoliciesResponse {
 		/**
 		 * The list of policies.
 		 */
-		entities: IAuthorizationPolicy[];
+		entities: IAuthorizationScopedPolicy[];
 
 		/**
 		 * An optional cursor, when defined can be used to retrieve the next chunk of results.

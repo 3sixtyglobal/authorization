@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0.
 import type { IComponent } from "@twin.org/core";
 import type { IAuthorizationModel } from "./IAuthorizationModel.js";
-import type { IAuthorizationPolicy } from "./IAuthorizationPolicy.js";
+import type { IAuthorizationScopedPolicy } from "./IAuthorizationScopedPolicy.js";
 
 /**
  * Interface describing an authorization connector.
@@ -63,7 +63,7 @@ export interface IAuthorizationConnector extends IComponent {
 		subject: string,
 		cursor?: string,
 		limit?: number
-	): Promise<{ entities: IAuthorizationPolicy[]; cursor?: string }>;
+	): Promise<{ entities: IAuthorizationScopedPolicy[]; cursor?: string }>;
 
 	/**
 	 * Get policy rules, optionally filtered by subject.
@@ -78,7 +78,7 @@ export interface IAuthorizationConnector extends IComponent {
 		subject?: string,
 		cursor?: string,
 		limit?: number
-	): Promise<{ entities: IAuthorizationPolicy[]; cursor?: string }>;
+	): Promise<{ entities: IAuthorizationScopedPolicy[]; cursor?: string }>;
 
 	/**
 	 * Get all distinct role names in the system.

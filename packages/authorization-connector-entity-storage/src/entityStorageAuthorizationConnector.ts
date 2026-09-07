@@ -3,7 +3,7 @@
 import type {
 	IAuthorizationConnector,
 	IAuthorizationModel,
-	IAuthorizationPolicy
+	IAuthorizationScopedPolicy
 } from "@twin.org/authorization-models";
 import { ContextIdKeys, ContextIdStore } from "@twin.org/context";
 import { BaseError, GeneralError, Guards, Is } from "@twin.org/core";
@@ -312,7 +312,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		subject: string,
 		cursor?: string,
 		limit?: number
-	): Promise<{ entities: IAuthorizationPolicy[]; cursor?: string }> {
+	): Promise<{ entities: IAuthorizationScopedPolicy[]; cursor?: string }> {
 		this.guardNoSeparator(nameof(modelId), modelId);
 		this.guardNoSeparator(nameof(subject), subject);
 
@@ -345,7 +345,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		subject?: string,
 		cursor?: string,
 		limit?: number
-	): Promise<{ entities: IAuthorizationPolicy[]; cursor?: string }> {
+	): Promise<{ entities: IAuthorizationScopedPolicy[]; cursor?: string }> {
 		this.guardNoSeparator(nameof(modelId), modelId);
 		if (subject !== undefined) {
 			this.guardNoSeparator(nameof(subject), subject);

@@ -36,3 +36,4 @@ export * from "./models/IAuthorizationConnector.js";
 export * from "./models/IAuthorizationInheritance.js";
 export * from "./models/IAuthorizationModel.js";
 export * from "./models/IAuthorizationPolicy.js";
+export * from "./models/IAuthorizationScopedPolicy.js";
