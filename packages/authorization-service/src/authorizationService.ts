@@ -814,35 +814,65 @@ export class AuthorizationService implements IAuthorizationComponent {
 	}
 
 	/**
-	 * Get the existing per-model caches a mutation in the current scope can affect. Tenants
-	 * are physically separated, so only the current tenant's caches are affected: the cache
-	 * for the exact organization (returned for fine-grained eviction) and, because global
-	 * rules match every organization, all of the tenant's other organization caches when the
-	 * mutation has no organization context (returned for full eviction).
+	 * The caches a mutation can affect: the current organization's, or every organization's in
+	 * the tenant when the mutation is global. Other tenants never qualify, they're isolated.
 	 * @param modelId The model identifier.
-	 * @returns The exact-scope cache if it exists and the other affected model cache maps.
+	 * @returns The affected caches and their organizations.
 	 * @internal
 	 */
-	private async getAffectedModelCaches(modelId: string): Promise<{
-		exact?: LfuCache<boolean>;
-		others: Map<string, LfuCache<boolean>>[];
-	}> {
+	private async getAffectedModelCaches(
+		modelId: string
+	): Promise<{ organizationId: string; cache: LfuCache<boolean> }[]> {
 		const scope = await this.getScope();
 		const organizationMap = this._checkCache.get(scope.tenantId);
 
-		let exact: LfuCache<boolean> | undefined;
-		const others: Map<string, LfuCache<boolean>>[] = [];
+		const affected: { organizationId: string; cache: LfuCache<boolean> }[] = [];
 		if (!Is.empty(organizationMap)) {
-			exact = organizationMap.get(scope.organizationId)?.get(modelId);
-			if (scope.organizationId === GLOBAL_ORGANIZATION) {
-				for (const [organizationId, modelMap] of organizationMap) {
-					if (organizationId !== GLOBAL_ORGANIZATION && modelMap.has(modelId)) {
-						others.push(modelMap);
-					}
+			for (const [organizationId, modelMap] of organizationMap) {
+				const cache = modelMap.get(modelId);
+				if (
+					!Is.empty(cache) &&
+					(organizationId === scope.organizationId || scope.organizationId === GLOBAL_ORGANIZATION)
+				) {
+					affected.push({ organizationId, cache });
 				}
 			}
 		}
-		return { exact, others };
+		return affected;
+	}
+
+	/**
+	 * Run a method as the given organization, so connector queries see what its cached checks saw.
+	 * @param organizationId The organization to run in, GLOBAL_ORGANIZATION for the current context.
+	 * @param method The method to run.
+	 * @returns The method result.
+	 * @internal
+	 */
+	private async runInOrganization<T>(organizationId: string, method: () => Promise<T>): Promise<T> {
+		if (organizationId === GLOBAL_ORGANIZATION) {
+			return method();
+		}
+		const contextIds = await ContextIdStore.getContextIds();
+		return ContextIdStore.run(
+			{ ...contextIds, [ContextIdKeys.UserOrganization]: organizationId },
+			method
+		);
+	}
+
+	/**
+	 * Evict the role's holders in every affected cache, resolved in that cache's organization:
+	 * a global context can't see organization-scoped assignments.
+	 * @param modelId The model identifier (for connector queries).
+	 * @param role The role or subject whose associated user IDs should have their cache evicted.
+	 * @internal
+	 */
+	private async invalidateCacheForRoleSubjects(modelId: string, role: string): Promise<void> {
+		const connector = this.getConnector();
+		for (const { organizationId, cache } of await this.getAffectedModelCaches(modelId)) {
+			await this.runInOrganization(organizationId, async () =>
+				this.evictRoleHolders(cache, connector, modelId, role)
+			);
+		}
 	}
 
 	/**
@@ -850,38 +880,37 @@ export class AuthorizationService implements IAuthorizationComponent {
 	 * BFS-traverses child roles (those that inherit FROM the given role) so that transitive
 	 * holders are also evicted. Also evicts cache entries whose key uses the role name as the
 	 * subject segment, which covers policies assigned directly to a user ID.
+	 * @param cache The resolved LFU cache for the scope and model.
+	 * @param connector The authorization connector.
 	 * @param modelId The model identifier (for connector queries).
 	 * @param role The role or subject whose associated user IDs should have their cache evicted.
 	 * @internal
 	 */
-	private async invalidateCacheForRoleSubjects(modelId: string, role: string): Promise<void> {
-		const affected = await this.getAffectedModelCaches(modelId);
-		for (const modelMap of affected.others) {
-			modelMap.delete(modelId);
-		}
-		const scopeCache = affected.exact;
-		if (!Is.empty(scopeCache)) {
-			const connector = this.getConnector();
-			const visited = new Set<string>();
-			const queue = [role];
+	private async evictRoleHolders(
+		cache: LfuCache<boolean>,
+		connector: IAuthorizationConnector,
+		modelId: string,
+		role: string
+	): Promise<void> {
+		const visited = new Set<string>();
+		const queue = [role];
 
-			while (queue.length > 0) {
-				const current = queue.shift();
-				if (!Is.empty(current) && !visited.has(current)) {
-					visited.add(current);
+		while (queue.length > 0) {
+			const current = queue.shift();
+			if (!Is.empty(current) && !visited.has(current)) {
+				visited.add(current);
 
-					this.invalidateCacheByPrefix(scopeCache, current);
+				this.invalidateCacheByPrefix(cache, current);
 
-					const subjects = await connector.getSubjectsForRole(modelId, current);
-					for (const subject of subjects) {
-						this.invalidateCacheByPrefix(scopeCache, subject);
-					}
+				const subjects = await connector.getSubjectsForRole(modelId, current);
+				for (const subject of subjects) {
+					this.invalidateCacheByPrefix(cache, subject);
+				}
 
-					const children = await connector.getChildRoles(modelId, current);
-					for (const child of children) {
-						if (!visited.has(child)) {
-							queue.push(child);
-						}
+				const children = await connector.getChildRoles(modelId, current);
+				for (const child of children) {
+					if (!visited.has(child)) {
+						queue.push(child);
 					}
 				}
 			}
@@ -889,18 +918,14 @@ export class AuthorizationService implements IAuthorizationComponent {
 	}
 
 	/**
-	 * Evict all cached check() results whose key starts with the given subject/role prefix.
-	 * @param modelId The model identifier (for connector queries).
+	 * Evict cached check() results for the subject/role prefix in every affected cache.
+	 * @param modelId The model identifier.
 	 * @param part The subject or role name to use as the key prefix segment.
 	 * @internal
 	 */
 	private async invalidateModelCacheByPrefix(modelId: string, part: string): Promise<void> {
-		const affected = await this.getAffectedModelCaches(modelId);
-		for (const modelMap of affected.others) {
-			modelMap.delete(modelId);
-		}
-		if (!Is.empty(affected.exact)) {
-			this.invalidateCacheByPrefix(affected.exact, part);
+		for (const { cache } of await this.getAffectedModelCaches(modelId)) {
+			this.invalidateCacheByPrefix(cache, part);
 		}
 	}
 

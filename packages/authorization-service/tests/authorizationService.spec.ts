@@ -219,6 +219,34 @@ describe("AuthorizationService", () => {
 			expect(spy).toHaveBeenCalledTimes(2);
 		});
 
+		test("a global role policy evicts only the role's holders in an organization cache", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.UserOrganization]: "orgA" }, async () =>
+				connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor")
+			);
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			const spy = vi.spyOn(connector, "check");
+
+			await ContextIdStore.run({ [ContextIdKeys.UserOrganization]: "orgA" }, async () => {
+				await service.check(TEST_MODEL_ID, "alice", "/data", "read");
+				await service.check(TEST_MODEL_ID, "bob", "/data", "read");
+			});
+			expect(spy).toHaveBeenCalledTimes(2);
+
+			// alice holds editor only inside orgA; the global write has to look there to find her.
+			await service.addPolicy(TEST_MODEL_ID, "editor", "/data", "read");
+
+			const results = await ContextIdStore.run(
+				{ [ContextIdKeys.UserOrganization]: "orgA" },
+				async () => [
+					await service.check(TEST_MODEL_ID, "alice", "/data", "read"),
+					await service.check(TEST_MODEL_ID, "bob", "/data", "read")
+				]
+			);
+			expect(results).toEqual([true, false]);
+			// alice re-evaluated, bob still cached
+			expect(spy).toHaveBeenCalledTimes(3);
+		});
+
 		test("an organization-scoped addPolicy does not invalidate another organization's cache", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");
