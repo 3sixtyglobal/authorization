@@ -930,18 +930,13 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	}
 
 	/**
-	 * Resolve the organization scope from the ambient context ids, following the user
-	 * organization when present and falling back to the deployment organization, matching
-	 * the convention used by other TWIN services.
-	 * @returns The resolved organization, GLOBAL_SCOPE when no organization context is present.
+	 * Resolve the organization scope from the ambient user organization context id.
+	 * @returns The resolved organization, GLOBAL_SCOPE when no user organization is present.
 	 * @internal
 	 */
 	private async getOrganization(): Promise<string> {
 		const contextIds = await ContextIdStore.getContextIds();
-		const organization =
-			contextIds?.[ContextIdKeys.UserOrganization] ??
-			contextIds?.[ContextIdKeys.Organization] ??
-			GLOBAL_SCOPE;
+		const organization = contextIds?.[ContextIdKeys.UserOrganization] ?? GLOBAL_SCOPE;
 		this.guardNoSeparator("organization", organization);
 		return organization;
 	}

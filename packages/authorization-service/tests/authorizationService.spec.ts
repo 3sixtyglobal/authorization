@@ -190,10 +190,10 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");
 
-			await ContextIdStore.run({ [ContextIdKeys.Organization]: "orgA" }, async () =>
+			await ContextIdStore.run({ [ContextIdKeys.UserOrganization]: "orgA" }, async () =>
 				service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
-			await ContextIdStore.run({ [ContextIdKeys.Organization]: "orgB" }, async () =>
+			await ContextIdStore.run({ [ContextIdKeys.UserOrganization]: "orgB" }, async () =>
 				service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 
@@ -204,7 +204,7 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");
 
-			await ContextIdStore.run({ [ContextIdKeys.Organization]: "orgA" }, async () =>
+			await ContextIdStore.run({ [ContextIdKeys.UserOrganization]: "orgA" }, async () =>
 				service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 			expect(spy).toHaveBeenCalledTimes(1);
@@ -213,7 +213,7 @@ describe("AuthorizationService", () => {
 			// so orgA's cached result must not survive it.
 			await service.addPolicy(TEST_MODEL_ID, "alice", "/data", "read");
 
-			await ContextIdStore.run({ [ContextIdKeys.Organization]: "orgA" }, async () =>
+			await ContextIdStore.run({ [ContextIdKeys.UserOrganization]: "orgA" }, async () =>
 				service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 			expect(spy).toHaveBeenCalledTimes(2);
@@ -223,22 +223,22 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");
 
-			await ContextIdStore.run({ [ContextIdKeys.Organization]: "orgA" }, async () =>
+			await ContextIdStore.run({ [ContextIdKeys.UserOrganization]: "orgA" }, async () =>
 				service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
-			await ContextIdStore.run({ [ContextIdKeys.Organization]: "orgB" }, async () =>
+			await ContextIdStore.run({ [ContextIdKeys.UserOrganization]: "orgB" }, async () =>
 				service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 			expect(spy).toHaveBeenCalledTimes(2);
 
-			await ContextIdStore.run({ [ContextIdKeys.Organization]: "orgA" }, async () =>
+			await ContextIdStore.run({ [ContextIdKeys.UserOrganization]: "orgA" }, async () =>
 				service.addPolicy(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 
-			await ContextIdStore.run({ [ContextIdKeys.Organization]: "orgA" }, async () =>
+			await ContextIdStore.run({ [ContextIdKeys.UserOrganization]: "orgA" }, async () =>
 				service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
-			await ContextIdStore.run({ [ContextIdKeys.Organization]: "orgB" }, async () =>
+			await ContextIdStore.run({ [ContextIdKeys.UserOrganization]: "orgB" }, async () =>
 				service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 
@@ -277,11 +277,11 @@ describe("AuthorizationService", () => {
 			const spy = vi.spyOn(connector, "check");
 
 			await ContextIdStore.run(
-				{ [ContextIdKeys.Tenant]: "tenantA", [ContextIdKeys.Organization]: "orgA" },
+				{ [ContextIdKeys.Tenant]: "tenantA", [ContextIdKeys.UserOrganization]: "orgA" },
 				async () => service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 			await ContextIdStore.run(
-				{ [ContextIdKeys.Tenant]: "tenantB", [ContextIdKeys.Organization]: "orgA" },
+				{ [ContextIdKeys.Tenant]: "tenantB", [ContextIdKeys.UserOrganization]: "orgA" },
 				async () => service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 			expect(spy).toHaveBeenCalledTimes(2);
@@ -291,11 +291,11 @@ describe("AuthorizationService", () => {
 			);
 
 			await ContextIdStore.run(
-				{ [ContextIdKeys.Tenant]: "tenantA", [ContextIdKeys.Organization]: "orgA" },
+				{ [ContextIdKeys.Tenant]: "tenantA", [ContextIdKeys.UserOrganization]: "orgA" },
 				async () => service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 			await ContextIdStore.run(
-				{ [ContextIdKeys.Tenant]: "tenantB", [ContextIdKeys.Organization]: "orgA" },
+				{ [ContextIdKeys.Tenant]: "tenantB", [ContextIdKeys.UserOrganization]: "orgA" },
 				async () => service.check(TEST_MODEL_ID, "alice", "/data", "read")
 			);
 

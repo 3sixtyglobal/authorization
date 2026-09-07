@@ -989,16 +989,13 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	}
 
 	/**
-	 * Get the organization ID from the ambient context, following the user organization
-	 * when present and falling back to the deployment organization, matching the convention
-	 * used by other TWIN services.
+	 * Get the organization ID from the ambient user organization context id.
 	 * @returns The organization ID, or undefined for the global scope.
 	 * @internal
 	 */
 	private async getOrganizationId(): Promise<string | undefined> {
 		const contextIds = await ContextIdStore.getContextIds();
-		const organizationId =
-			contextIds?.[ContextIdKeys.UserOrganization] ?? contextIds?.[ContextIdKeys.Organization];
+		const organizationId = contextIds?.[ContextIdKeys.UserOrganization];
 		return Is.stringValue(organizationId) ? organizationId : undefined;
 	}
 

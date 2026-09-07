@@ -130,7 +130,7 @@ Rules can be scoped along two independent dimensions, both resolved from the amb
 
 **Tenant** separation is a storage concern. The entity storage connector delegates it to the entity storage layer: partition the configured storage by the tenant context id (`partitionContextIds: [ContextIdKeys.Tenant]`) and each tenant gets a fully isolated policy set. The Casbin connector provisions a dedicated enforcer and policy table per tenant. In both cases two tenants can never see each other's rules.
 
-**Organization** scoping rides on the rules themselves, inside a tenant. The organization is resolved as `ContextIdKeys.UserOrganization`, falling back to `ContextIdKeys.Organization` (the same convention other TWIN services use). The rules are:
+**Organization** scoping rides on the rules themselves, inside a tenant. The organization is `ContextIdKeys.UserOrganization`, the caller's own organization; `ContextIdKeys.Organization` (the deployment or tenant organization) plays no part, so a request without a user organization operates on the global tier. The rules are:
 
 - **Writes stamp the current organization.** `addPolicy`, `addRoleForSubject`, and `addRoleInheritance` called with an organization context create organization-scoped rules; called without one they create global rules, exactly as before.
 - **Checks and queries match global rules plus the current organization's rules.** A global rule is visible in every organization; an organization-scoped rule is visible only when the ambient organization matches. Without an organization context only global rules apply, so one organization's rules can never influence another's decisions, or global ones.

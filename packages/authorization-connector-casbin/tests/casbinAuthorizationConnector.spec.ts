@@ -1126,7 +1126,7 @@ describe("CasbinAuthorizationConnector", () => {
 		afterEach(async () => {
 			for (const org of [ORG_A, ORG_B]) {
 				await ContextIdStore.run(
-					{ [ContextIdKeys.Tenant]: TEST_TENANT_A, [ContextIdKeys.Organization]: org },
+					{ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A, [ContextIdKeys.UserOrganization]: org },
 					async () => {
 						const { entities } = await connector.getAllPolicies(TEST_MODEL_ID);
 						for (const policy of entities) {
@@ -1147,7 +1147,7 @@ describe("CasbinAuthorizationConnector", () => {
 
 		test("an organization-scoped policy round-trips and is reported with its organization", async () => {
 			await ContextIdStore.run(
-				{ [ContextIdKeys.Tenant]: TEST_TENANT_A, [ContextIdKeys.Organization]: ORG_A },
+				{ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A, [ContextIdKeys.UserOrganization]: ORG_A },
 				async () => {
 					await connector.addPolicy(TEST_MODEL_ID, "alice", "document", "read");
 					const { entities } = await connector.getAllPolicies(TEST_MODEL_ID);
@@ -1157,25 +1157,25 @@ describe("CasbinAuthorizationConnector", () => {
 				}
 			);
 
-			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
 				const { entities } = await connector.getAllPolicies(TEST_MODEL_ID);
 				expect(entities).toEqual([]);
 			});
 		});
 
 		test("a global policy matches under an organization context, a scoped one only its own", async () => {
-			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
 				await connector.addPolicy(TEST_MODEL_ID, "alice", "document", "read");
 			});
 			await ContextIdStore.run(
-				{ [ContextIdKeys.Tenant]: TEST_TENANT_A, [ContextIdKeys.Organization]: ORG_A },
+				{ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A, [ContextIdKeys.UserOrganization]: ORG_A },
 				async () => {
 					await connector.addPolicy(TEST_MODEL_ID, "alice", "document", "write");
 				}
 			);
 
 			await ContextIdStore.run(
-				{ [ContextIdKeys.Tenant]: TEST_TENANT_A, [ContextIdKeys.Organization]: ORG_A },
+				{ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A, [ContextIdKeys.UserOrganization]: ORG_A },
 				async () => {
 					await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(
 						true
@@ -1186,14 +1186,14 @@ describe("CasbinAuthorizationConnector", () => {
 				}
 			);
 			await ContextIdStore.run(
-				{ [ContextIdKeys.Tenant]: TEST_TENANT_A, [ContextIdKeys.Organization]: ORG_B },
+				{ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A, [ContextIdKeys.UserOrganization]: ORG_B },
 				async () => {
 					await expect(connector.check(TEST_MODEL_ID, "alice", "document", "write")).resolves.toBe(
 						false
 					);
 				}
 			);
-			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
 				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "write")).resolves.toBe(
 					false
 				);
@@ -1201,18 +1201,18 @@ describe("CasbinAuthorizationConnector", () => {
 		});
 
 		test("an organization-scoped role assignment grants access through a global role policy", async () => {
-			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
 				await connector.addPolicy(TEST_MODEL_ID, "editor", "document", "write");
 			});
 			await ContextIdStore.run(
-				{ [ContextIdKeys.Tenant]: TEST_TENANT_A, [ContextIdKeys.Organization]: ORG_A },
+				{ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A, [ContextIdKeys.UserOrganization]: ORG_A },
 				async () => {
 					await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
 				}
 			);
 
 			await ContextIdStore.run(
-				{ [ContextIdKeys.Tenant]: TEST_TENANT_A, [ContextIdKeys.Organization]: ORG_A },
+				{ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A, [ContextIdKeys.UserOrganization]: ORG_A },
 				async () => {
 					await expect(connector.check(TEST_MODEL_ID, "alice", "document", "write")).resolves.toBe(
 						true
@@ -1223,7 +1223,7 @@ describe("CasbinAuthorizationConnector", () => {
 				}
 			);
 			await ContextIdStore.run(
-				{ [ContextIdKeys.Tenant]: TEST_TENANT_A, [ContextIdKeys.Organization]: ORG_B },
+				{ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A, [ContextIdKeys.UserOrganization]: ORG_B },
 				async () => {
 					await expect(connector.check(TEST_MODEL_ID, "alice", "document", "write")).resolves.toBe(
 						false
@@ -1236,12 +1236,12 @@ describe("CasbinAuthorizationConnector", () => {
 		});
 
 		test("removal under an organization context does not remove the global rule", async () => {
-			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_A }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
 				await connector.addPolicy(TEST_MODEL_ID, "alice", "document", "read");
 			});
 
 			await ContextIdStore.run(
-				{ [ContextIdKeys.Tenant]: TEST_TENANT_A, [ContextIdKeys.Organization]: ORG_A },
+				{ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A, [ContextIdKeys.UserOrganization]: ORG_A },
 				async () => {
 					await connector.removePolicy(TEST_MODEL_ID, "alice", "document", "read");
 					await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(

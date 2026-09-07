@@ -769,9 +769,8 @@ export class AuthorizationService implements IAuthorizationComponent {
 	}
 
 	/**
-	 * Resolve the scope partitioning the check cache from the ambient tenant and organization
-	 * context ids. The organization follows the user organization when present, falling back
-	 * to the deployment organization.
+	 * Resolve the scope partitioning the check cache from the ambient tenant and user
+	 * organization context ids.
 	 * @returns The tenant and organization identifiers.
 	 * @internal
 	 */
@@ -779,10 +778,7 @@ export class AuthorizationService implements IAuthorizationComponent {
 		const contextIds = await ContextIdStore.getContextIds();
 		return {
 			tenantId: contextIds?.[ContextIdKeys.Tenant] ?? ROOT_TENANT,
-			organizationId:
-				contextIds?.[ContextIdKeys.UserOrganization] ??
-				contextIds?.[ContextIdKeys.Organization] ??
-				GLOBAL_ORGANIZATION
+			organizationId: contextIds?.[ContextIdKeys.UserOrganization] ?? GLOBAL_ORGANIZATION
 		};
 	}
 
