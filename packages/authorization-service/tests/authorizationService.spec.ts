@@ -246,6 +246,63 @@ describe("AuthorizationService", () => {
 			expect(spy).toHaveBeenCalledTimes(3);
 		});
 
+		test("a mutation without a tenant context does not invalidate tenant caches", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			const spy = vi.spyOn(connector, "check");
+
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read");
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantA" }, async () =>
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
+			);
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantB" }, async () =>
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
+			);
+			expect(spy).toHaveBeenCalledTimes(3);
+
+			// Tenants are physically separated, so a root mutation only affects the root cache.
+			await service.addPolicy(TEST_MODEL_ID, "alice", "/data", "read");
+
+			await service.check(TEST_MODEL_ID, "alice", "/data", "read");
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantA" }, async () =>
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
+			);
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantB" }, async () =>
+				service.check(TEST_MODEL_ID, "alice", "/data", "read")
+			);
+			expect(spy).toHaveBeenCalledTimes(4);
+		});
+
+		test("a global addPolicy in one tenant does not invalidate another tenant's organization cache", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			const spy = vi.spyOn(connector, "check");
+
+			await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: "tenantA", [ContextIdKeys.Organization]: "orgA" },
+				async () => service.check(TEST_MODEL_ID, "alice", "/data", "read")
+			);
+			await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: "tenantB", [ContextIdKeys.Organization]: "orgA" },
+				async () => service.check(TEST_MODEL_ID, "alice", "/data", "read")
+			);
+			expect(spy).toHaveBeenCalledTimes(2);
+
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: "tenantA" }, async () =>
+				service.addPolicy(TEST_MODEL_ID, "alice", "/data", "read")
+			);
+
+			await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: "tenantA", [ContextIdKeys.Organization]: "orgA" },
+				async () => service.check(TEST_MODEL_ID, "alice", "/data", "read")
+			);
+			await ContextIdStore.run(
+				{ [ContextIdKeys.Tenant]: "tenantB", [ContextIdKeys.Organization]: "orgA" },
+				async () => service.check(TEST_MODEL_ID, "alice", "/data", "read")
+			);
+
+			// tenantA/orgA evicted by tenantA's global rule, tenantB/orgA still cached
+			expect(spy).toHaveBeenCalledTimes(3);
+		});
+
 		test("caches false results", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const spy = vi.spyOn(connector, "check");

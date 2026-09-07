@@ -24,6 +24,16 @@ import { MetricHelper, type ITelemetryComponent } from "@twin.org/telemetry-mode
 import type { IAuthorizationServiceConstructorOptions } from "./models/IAuthorizationServiceConstructorOptions.js";
 
 /**
+ * The check cache tenant scope used when no tenant context id is set.
+ */
+const ROOT_TENANT = "root";
+
+/**
+ * The check cache organization scope used when no organization context id is set.
+ */
+const GLOBAL_ORGANIZATION = "*";
+
+/**
  * A service that implements the IAuthorizationComponent interface for handling authorization logic.
  */
 export class AuthorizationService implements IAuthorizationComponent {
@@ -79,12 +89,12 @@ export class AuthorizationService implements IAuthorizationComponent {
 	private readonly _checkCacheConfig: { capacity?: number; ttiMs: number };
 
 	/**
-	 * Per-scope, per-model LFU caches for check() results.
-	 * Outer key: "tenant|organization" scope key ("root" when no tenant is set, "*" when no
-	 * organization is set). Inner key: model identifier.
+	 * Per-tenant, per-organization, per-model LFU caches for check() results.
+	 * Outer key: tenant identifier ("root" when no tenant is set). Middle key: organization
+	 * identifier ("*" when no organization is set). Inner key: model identifier.
 	 * @internal
 	 */
-	private readonly _checkCache: Map<string, Map<string, LfuCache<boolean>>>;
+	private readonly _checkCache: Map<string, Map<string, Map<string, LfuCache<boolean>>>>;
 
 	/**
 	 * Create a new instance of AuthorizationService.
@@ -115,7 +125,7 @@ export class AuthorizationService implements IAuthorizationComponent {
 			capacity: options?.config?.checkCacheCapacity,
 			ttiMs: options?.config?.checkCacheTtiMs ?? 60000
 		};
-		this._checkCache = new Map<string, Map<string, LfuCache<boolean>>>();
+		this._checkCache = new Map<string, Map<string, Map<string, LfuCache<boolean>>>>();
 	}
 
 	/**
@@ -214,10 +224,11 @@ export class AuthorizationService implements IAuthorizationComponent {
 
 		try {
 			const connector = this.getConnector();
-			const scopeKey = await this.getScopeKey();
+			const scope = await this.getScope();
 			const key = this.buildCacheKey(subject, object, action);
-			return await this.getScopeCache(modelId, scopeKey).getOrSet(key, async () =>
-				connector.check(modelId, subject, object, action)
+			return await this.getScopeCache(modelId, scope.tenantId, scope.organizationId).getOrSet(
+				key,
+				async () => connector.check(modelId, subject, object, action)
 			);
 		} catch (error) {
 			throw new GeneralError(AuthorizationService.CLASS_NAME, "checkFailed", undefined, error);
@@ -758,34 +769,45 @@ export class AuthorizationService implements IAuthorizationComponent {
 	}
 
 	/**
-	 * Build the scope key partitioning the check cache, from the ambient tenant and
-	 * organization context ids. The organization follows the user organization when present,
-	 * falling back to the deployment organization.
-	 * @returns The scope key string.
+	 * Resolve the scope partitioning the check cache from the ambient tenant and organization
+	 * context ids. The organization follows the user organization when present, falling back
+	 * to the deployment organization.
+	 * @returns The tenant and organization identifiers.
 	 * @internal
 	 */
-	private async getScopeKey(): Promise<string> {
+	private async getScope(): Promise<{ tenantId: string; organizationId: string }> {
 		const contextIds = await ContextIdStore.getContextIds();
-		const tenantId = contextIds?.[ContextIdKeys.Tenant] ?? "root";
-		const organizationId =
-			contextIds?.[ContextIdKeys.UserOrganization] ??
-			contextIds?.[ContextIdKeys.Organization] ??
-			"*";
-		return `${tenantId}|${organizationId}`;
+		return {
+			tenantId: contextIds?.[ContextIdKeys.Tenant] ?? ROOT_TENANT,
+			organizationId:
+				contextIds?.[ContextIdKeys.UserOrganization] ??
+				contextIds?.[ContextIdKeys.Organization] ??
+				GLOBAL_ORGANIZATION
+		};
 	}
 
 	/**
-	 * Get or create the per-scope, per-model LFU cache.
+	 * Get or create the per-tenant, per-organization, per-model LFU cache.
 	 * @param modelId The model identifier.
-	 * @param scopeKey The tenant and organization scope key.
+	 * @param tenantId The tenant identifier.
+	 * @param organizationId The organization identifier.
 	 * @returns The LFU cache for the scope and model.
 	 * @internal
 	 */
-	private getScopeCache(modelId: string, scopeKey: string): LfuCache<boolean> {
-		let modelMap = this._checkCache.get(scopeKey);
+	private getScopeCache(
+		modelId: string,
+		tenantId: string,
+		organizationId: string
+	): LfuCache<boolean> {
+		let organizationMap = this._checkCache.get(tenantId);
+		if (Is.empty(organizationMap)) {
+			organizationMap = new Map<string, Map<string, LfuCache<boolean>>>();
+			this._checkCache.set(tenantId, organizationMap);
+		}
+		let modelMap = organizationMap.get(organizationId);
 		if (Is.empty(modelMap)) {
 			modelMap = new Map<string, LfuCache<boolean>>();
-			this._checkCache.set(scopeKey, modelMap);
+			organizationMap.set(organizationId, modelMap);
 		}
 		let cache = modelMap.get(modelId);
 		if (Is.empty(cache)) {
@@ -796,11 +818,11 @@ export class AuthorizationService implements IAuthorizationComponent {
 	}
 
 	/**
-	 * Get the existing per-scope, per-model caches a mutation in the current scope can
-	 * affect. A mutation affects its own scope's cache (returned for fine-grained eviction)
-	 * and, because global rules match every scope, a mutation with a global tenant or
-	 * organization dimension also affects every cache along that dimension (returned for
-	 * full eviction).
+	 * Get the existing per-model caches a mutation in the current scope can affect. Tenants
+	 * are physically separated, so only the current tenant's caches are affected: the cache
+	 * for the exact organization (returned for fine-grained eviction) and, because global
+	 * rules match every organization, all of the tenant's other organization caches when the
+	 * mutation has no organization context (returned for full eviction).
 	 * @param modelId The model identifier.
 	 * @returns The exact-scope cache if it exists and the other affected model cache maps.
 	 * @internal
@@ -809,26 +831,18 @@ export class AuthorizationService implements IAuthorizationComponent {
 		exact?: LfuCache<boolean>;
 		others: Map<string, LfuCache<boolean>>[];
 	}> {
-		const contextIds = await ContextIdStore.getContextIds();
-		const tenantId = contextIds?.[ContextIdKeys.Tenant];
-		const organizationId =
-			contextIds?.[ContextIdKeys.UserOrganization] ?? contextIds?.[ContextIdKeys.Organization];
-		const exactKey = await this.getScopeKey();
+		const scope = await this.getScope();
+		const organizationMap = this._checkCache.get(scope.tenantId);
 
 		let exact: LfuCache<boolean> | undefined;
 		const others: Map<string, LfuCache<boolean>>[] = [];
-		for (const [scopeKey, modelMap] of this._checkCache) {
-			if (scopeKey === exactKey) {
-				exact = modelMap.get(modelId);
-			} else {
-				const separatorIndex = scopeKey.indexOf("|");
-				const scopeTenant = scopeKey.slice(0, separatorIndex);
-				const scopeOrganization = scopeKey.slice(separatorIndex + 1);
-				const tenantAffected = !Is.stringValue(tenantId) || scopeTenant === tenantId;
-				const organizationAffected =
-					!Is.stringValue(organizationId) || scopeOrganization === organizationId;
-				if (tenantAffected && organizationAffected && modelMap.has(modelId)) {
-					others.push(modelMap);
+		if (!Is.empty(organizationMap)) {
+			exact = organizationMap.get(scope.organizationId)?.get(modelId);
+			if (scope.organizationId === GLOBAL_ORGANIZATION) {
+				for (const [organizationId, modelMap] of organizationMap) {
+					if (organizationId !== GLOBAL_ORGANIZATION && modelMap.has(modelId)) {
+						others.push(modelMap);
+					}
 				}
 			}
 		}
@@ -915,8 +929,10 @@ export class AuthorizationService implements IAuthorizationComponent {
 	 * @internal
 	 */
 	private invalidateCacheForModel(modelId: string): void {
-		for (const modelMap of this._checkCache.values()) {
-			modelMap.delete(modelId);
+		for (const organizationMap of this._checkCache.values()) {
+			for (const modelMap of organizationMap.values()) {
+				modelMap.delete(modelId);
+			}
 		}
 	}
 

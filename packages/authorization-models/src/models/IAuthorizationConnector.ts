@@ -6,6 +6,10 @@ import type { IAuthorizationPolicy } from "./IAuthorizationPolicy.js";
 
 /**
  * Interface describing an authorization connector.
+ *
+ * Rules are scoped by the ambient tenant and organization context ids, not by parameters:
+ * writes stamp the current organization, reads see global plus current, removals match it exactly.
+ * Role names aren't scoped. See docs/architecture/rbac-configuration.md.
  */
 export interface IAuthorizationConnector extends IComponent {
 	/**

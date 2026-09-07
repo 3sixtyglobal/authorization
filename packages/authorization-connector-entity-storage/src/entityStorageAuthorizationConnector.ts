@@ -695,7 +695,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 					)
 				)
 			);
-			return entities.some(entity => entity !== undefined);
+			return entities.some(entity => Is.notEmpty(entity));
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -1008,7 +1008,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 				)
 			)
 		);
-		return entities.some(entity => entity !== undefined);
+		return entities.some(entity => Is.notEmpty(entity));
 	}
 
 	/**
