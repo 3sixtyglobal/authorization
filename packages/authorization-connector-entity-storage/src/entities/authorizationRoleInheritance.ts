@@ -11,30 +11,30 @@ export class AuthorizationRoleInheritance {
 	 * The compound identifier for this inheritance relationship, in
 	 * "modelId|organization|role|inheritsFrom" format.
 	 */
-	@property({ type: "string", isPrimary: true })
+	@property({ type: "string", isPrimary: true, maxLength: 255 })
 	public id!: string;
 
 	/**
 	 * The model identifier partitioning this inheritance.
 	 */
-	@property({ type: "string", isSecondary: true })
+	@property({ type: "string", maxLength: 255, isSecondary: true })
 	public modelId!: string;
 
 	/**
 	 * The child role that inherits permissions from the parent.
 	 */
-	@property({ type: "string", isSecondary: true })
+	@property({ type: "string", maxLength: 128, isSecondary: true })
 	public role!: string;
 
 	/**
 	 * The parent role whose permissions are inherited.
 	 */
-	@property({ type: "string", isSecondary: true })
+	@property({ type: "string", maxLength: 128, isSecondary: true })
 	public inheritsFrom!: string;
 
 	/**
 	 * The organization the inheritance is scoped to, "*" for a global inheritance.
 	 */
-	@property({ type: "string", isSecondary: true })
+	@property({ type: "string", maxLength: 255, isSecondary: true })
 	public organization!: string;
 }

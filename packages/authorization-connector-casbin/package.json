@@ -1,6 +1,6 @@
 {
 	"name": "@twin.org/authorization-connector-casbin",
-	"version": "0.9.3-next.0",
+	"version": "0.10.1-next.0",
 	"description": "Authorisation connector that evaluates policies using Casbin-compatible services.",
 	"repository": {
 		"type": "git",
@@ -28,7 +28,7 @@
 		"dist:no-test": "npm run clean && npm run build && npm run test:build"
 	},
 	"dependencies": {
-		"@twin.org/authorization-models": "0.9.3-next.0",
+		"@twin.org/authorization-models": "0.10.1-next.0",
 		"@twin.org/context": "next",
 		"@twin.org/core": "next",
 		"@twin.org/logging-models": "next",

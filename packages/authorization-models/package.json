@@ -1,6 +1,6 @@
 {
 	"name": "@twin.org/authorization-models",
-	"version": "0.9.3-next.0",
+	"version": "0.10.1-next.0",
 	"description": "Shared interfaces and contract models for authorisation components.",
 	"repository": {
 		"type": "git",

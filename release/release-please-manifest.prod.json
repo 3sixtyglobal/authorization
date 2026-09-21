@@ -1,7 +1,7 @@
 {
-	"packages/authorization-models": "0.9.3-next.0",
-	"packages/authorization-connector-entity-storage": "0.9.3-next.0",
-	"packages/authorization-connector-casbin": "0.9.3-next.0",
-	"packages/authorization-service": "0.9.3-next.0",
-	"packages/authorization-rest-client": "0.9.3-next.0"
+	"packages/authorization-models": "0.10.0",
+	"packages/authorization-connector-entity-storage": "0.10.0",
+	"packages/authorization-connector-casbin": "0.10.0",
+	"packages/authorization-service": "0.10.0",
+	"packages/authorization-rest-client": "0.10.0"
 }
