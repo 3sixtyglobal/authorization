@@ -15,3 +15,7 @@ Together, these components let teams define access contracts once, apply them th
 ## Contributing
 
 To contribute to this package see the guidelines for building and publishing in [CONTRIBUTING](./CONTRIBUTING.md)
+
+## Origin
+
+This repository is derived from the original [iotaledger/twin-authorization](https://github.com/iotaledger/twin-authorization) repository.

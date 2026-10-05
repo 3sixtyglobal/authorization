@@ -4,7 +4,7 @@
 	"description": "Shared interfaces and contract models for authorisation components.",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/iotaledger/twin-authorization.git",
+		"url": "git+https://github.com/3sixtyglobal/twin-authorization.git",
 		"directory": "packages/authorization-models"
 	},
 	"author": "martyn.janes@iota.org",
@@ -69,7 +69,7 @@
 		"models"
 	],
 	"bugs": {
-		"url": "git+https://github.com/iotaledger/twin-authorization/issues"
+		"url": "git+https://github.com/3sixtyglobal/twin-authorization/issues"
 	},
 	"homepage": "https://twindev.org"
 }

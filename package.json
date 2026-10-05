@@ -4,7 +4,7 @@
 	"description": "Repository of authorization models, connectors, and service contracts.",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/iotaledger/twin-authorization.git"
+		"url": "git+https://github.com/3sixtyglobal/twin-authorization.git"
 	},
 	"author": "martyn.janes@iota.org",
 	"license": "Apache-2.0",
@@ -68,7 +68,7 @@
 	},
 	"type": "module",
 	"bugs": {
-		"url": "git+https://github.com/iotaledger/twin-authorization/issues"
+		"url": "git+https://github.com/3sixtyglobal/twin-authorization/issues"
 	},
 	"homepage": "https://twindev.org"
 }

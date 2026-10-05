@@ -4,7 +4,7 @@
 	"description": "REST client for consuming authorisation service endpoints.",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/iotaledger/twin-authorization.git",
+		"url": "git+https://github.com/3sixtyglobal/twin-authorization.git",
 		"directory": "packages/authorization-rest-client"
 	},
 	"author": "martyn.janes@iota.org",
@@ -72,7 +72,7 @@
 		"rest-client"
 	],
 	"bugs": {
-		"url": "git+https://github.com/iotaledger/twin-authorization/issues"
+		"url": "git+https://github.com/3sixtyglobal/twin-authorization/issues"
 	},
 	"homepage": "https://twindev.org"
 }

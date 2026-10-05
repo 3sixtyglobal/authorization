@@ -4,7 +4,7 @@
 	"description": "Authorisation connector that resolves access rules from entity storage.",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/iotaledger/twin-authorization.git",
+		"url": "git+https://github.com/3sixtyglobal/twin-authorization.git",
 		"directory": "packages/authorization-connector-entity-storage"
 	},
 	"author": "martyn.janes@iota.org",
@@ -72,7 +72,7 @@
 		"authorization"
 	],
 	"bugs": {
-		"url": "git+https://github.com/iotaledger/twin-authorization/issues"
+		"url": "git+https://github.com/3sixtyglobal/twin-authorization/issues"
 	},
 	"homepage": "https://twindev.org"
 }
