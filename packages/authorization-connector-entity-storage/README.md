@@ -1,11 +1,11 @@
-# @twin.org/authorization-connector-entity-storage
+# @3sixty/authorization-connector-entity-storage
 
 This package provides an entity storage-based connector for authorisation decisions, enabling policy checks against entity and relationship data held in a storage backend.
 
 ## Installation
 
 ```shell
-npm install @twin.org/authorization-connector-entity-storage
+npm install @3sixty/authorization-connector-entity-storage
 ```
 
 ## Examples

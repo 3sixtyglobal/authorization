@@ -1,11 +1,11 @@
-# @twin.org/authorization-rest-client
+# @3sixty/authorization-rest-client
 
 This package provides a REST client for consuming authorisation service endpoints, giving dependent components a consistent API for remote policy checks.
 
 ## Installation
 
 ```shell
-npm install @twin.org/authorization-rest-client
+npm install @3sixty/authorization-rest-client
 ```
 
 ## Examples

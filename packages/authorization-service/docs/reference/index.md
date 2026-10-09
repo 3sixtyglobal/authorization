@@ -1,4 +1,4 @@
-# @twin.org/authorization-service
+# @3sixty/authorization-service
 
 ## Classes
 

@@ -1,11 +1,11 @@
-# @twin.org/authorization-service
+# @3sixty/authorization-service
 
 This package provides the service layer for exposing authorisation operations through HTTP APIs, acting as the integration point between policy models and runtime connectors.
 
 ## Installation
 
 ```shell
-npm install @twin.org/authorization-service
+npm install @3sixty/authorization-service
 ```
 
 ## Examples

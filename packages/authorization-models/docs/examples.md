@@ -5,7 +5,7 @@ These examples show how to work with policy and role contracts in a type-safe wa
 ## AuthorizationConnectorFactory
 
 ```typescript
-import { AuthorizationConnectorFactory } from '@twin.org/authorization-models';
+import { AuthorizationConnectorFactory } from '@3sixty/authorization-models';
 
 const connectorNames = AuthorizationConnectorFactory.names();
 console.log(connectorNames); // ["entity-storage", "casbin"]
@@ -17,7 +17,7 @@ console.log(connector.className()); // "EntityStorageAuthorizationConnector"
 ## IAuthorizationPolicy
 
 ```typescript
-import type { IAuthorizationPolicy } from '@twin.org/authorization-models';
+import type { IAuthorizationPolicy } from '@3sixty/authorization-models';
 
 const readPolicy: IAuthorizationPolicy = {
   subject: 'editor',
@@ -38,7 +38,7 @@ console.log(writePolicy); // { subject: "editor", object: "documents", action: "
 ## IAuthorizationComponent
 
 ```typescript
-import type { IAuthorizationComponent } from '@twin.org/authorization-models';
+import type { IAuthorizationComponent } from '@3sixty/authorization-models';
 
 async function configureAndCheck(component: IAuthorizationComponent): Promise<void> {
   await component.addPolicy({

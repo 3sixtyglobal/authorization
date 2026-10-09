@@ -8,8 +8,8 @@ import {
 	type IAuthorizationConnector,
 	type IAuthorizationModel,
 	type IAuthorizationPolicy
-} from "@twin.org/authorization-models";
-import { ContextIdKeys, ContextIdStore } from "@twin.org/context";
+} from "@3sixty/authorization-models";
+import { ContextIdKeys, ContextIdStore } from "@3sixty/context";
 import {
 	ComponentFactory,
 	GeneralError,
@@ -17,10 +17,10 @@ import {
 	Is,
 	LfuCache,
 	UnauthorizedError
-} from "@twin.org/core";
-import type { ILoggingComponent } from "@twin.org/logging-models";
-import { nameof } from "@twin.org/nameof";
-import { MetricHelper, type ITelemetryComponent } from "@twin.org/telemetry-models";
+} from "@3sixty/core";
+import type { ILoggingComponent } from "@3sixty/logging-models";
+import { nameof } from "@3sixty/nameof";
+import { MetricHelper, type ITelemetryComponent } from "@3sixty/telemetry-models";
 import type { IAuthorizationServiceConstructorOptions } from "./models/IAuthorizationServiceConstructorOptions.js";
 
 /**

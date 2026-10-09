@@ -4,8 +4,8 @@ import type {
 	IAuthorizationConnector,
 	IAuthorizationModel,
 	IAuthorizationPolicy
-} from "@twin.org/authorization-models";
-import { ContextIdKeys, ContextIdStore } from "@twin.org/context";
+} from "@3sixty/authorization-models";
+import { ContextIdKeys, ContextIdStore } from "@3sixty/context";
 import {
 	BaseError,
 	ComponentFactory,
@@ -14,10 +14,10 @@ import {
 	Guards,
 	Is,
 	StringHelper
-} from "@twin.org/core";
-import type { ILoggingComponent } from "@twin.org/logging-models";
-import { nameof } from "@twin.org/nameof";
-import { FetchHelper, HttpMethod, type IHttpHeaders } from "@twin.org/web";
+} from "@3sixty/core";
+import type { ILoggingComponent } from "@3sixty/logging-models";
+import { nameof } from "@3sixty/nameof";
+import { FetchHelper, HttpMethod, type IHttpHeaders } from "@3sixty/web";
 import type { ICasbinAuthorizationConnectorConfig } from "./models/ICasbinAuthorizationConnectorConfig.js";
 import type { ICasbinAuthorizationConnectorConstructorOptions } from "./models/ICasbinAuthorizationConnectorConstructorOptions.js";
 import type { ICasbinServerResponse } from "./models/ICasbinServerResponse.js";

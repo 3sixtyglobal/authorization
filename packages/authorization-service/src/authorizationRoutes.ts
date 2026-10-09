@@ -6,7 +6,7 @@ import type {
 	IRestRoute,
 	IRouteAuthorization,
 	ITag
-} from "@twin.org/api-models";
+} from "@3sixty/api-models";
 import type {
 	IAuthorizationAddPolicyRequest,
 	IAuthorizationAddRoleForSubjectRequest,
@@ -37,10 +37,10 @@ import type {
 	IAuthorizationRemovePolicyRequest,
 	IAuthorizationRemoveRoleForSubjectRequest,
 	IAuthorizationRemoveRoleInheritanceRequest
-} from "@twin.org/authorization-models";
-import { Coerce, ComponentFactory, Guards } from "@twin.org/core";
-import { nameof } from "@twin.org/nameof";
-import { HttpStatusCode } from "@twin.org/web";
+} from "@3sixty/authorization-models";
+import { Coerce, ComponentFactory, Guards } from "@3sixty/core";
+import { nameof } from "@3sixty/nameof";
+import { HttpStatusCode } from "@3sixty/web";
 
 const ROUTES_SOURCE = "authorizationRoutes";
 

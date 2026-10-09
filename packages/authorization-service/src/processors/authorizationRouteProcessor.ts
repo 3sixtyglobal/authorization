@@ -6,12 +6,12 @@ import {
 	type IBaseRouteProcessor,
 	type IHttpResponse,
 	type IHttpServerRequest
-} from "@twin.org/api-models";
-import type { IAuthorizationComponent } from "@twin.org/authorization-models";
-import { ContextIdKeys, type IContextIds } from "@twin.org/context";
-import { BaseError, ComponentFactory, GeneralError, Is, UnauthorizedError } from "@twin.org/core";
-import { nameof } from "@twin.org/nameof";
-import { HttpStatusCode } from "@twin.org/web";
+} from "@3sixty/api-models";
+import type { IAuthorizationComponent } from "@3sixty/authorization-models";
+import { ContextIdKeys, type IContextIds } from "@3sixty/context";
+import { BaseError, ComponentFactory, GeneralError, Is, UnauthorizedError } from "@3sixty/core";
+import { nameof } from "@3sixty/nameof";
+import { HttpStatusCode } from "@3sixty/web";
 import type { IAuthorizationRouteProcessorConstructorOptions } from "../models/IAuthorizationRouteProcessorConstructorOptions.js";
 
 /**

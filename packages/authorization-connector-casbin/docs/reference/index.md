@@ -1,4 +1,4 @@
-# @twin.org/authorization-connector-casbin
+# @3sixty/authorization-connector-casbin
 
 ## Classes
 

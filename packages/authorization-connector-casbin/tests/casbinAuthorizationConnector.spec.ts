@@ -1,6 +1,6 @@
 // Copyright 2026 IOTA Stiftung.
 // SPDX-License-Identifier: Apache-2.0.
-import { ContextIdKeys, ContextIdStore } from "@twin.org/context";
+import { ContextIdKeys, ContextIdStore } from "@3sixty/context";
 import {
 	TEST_CASBIN_CLIENT_ID,
 	TEST_CASBIN_CLIENT_SECRET,

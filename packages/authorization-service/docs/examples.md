@@ -5,7 +5,7 @@ These examples show how to compose policy and role operations behind a single se
 ## AuthorizationService
 
 ```typescript
-import { AuthorizationService } from '@twin.org/authorization-service';
+import { AuthorizationService } from '@3sixty/authorization-service';
 
 const service = new AuthorizationService({
   config: {
@@ -18,7 +18,7 @@ console.log(service.className()); // "AuthorizationService"
 ```
 
 ```typescript
-import { AuthorizationService } from '@twin.org/authorization-service';
+import { AuthorizationService } from '@3sixty/authorization-service';
 
 const service = new AuthorizationService({
   config: {
@@ -37,7 +37,7 @@ console.log(hasRole); // true
 ```
 
 ```typescript
-import { AuthorizationService } from '@twin.org/authorization-service';
+import { AuthorizationService } from '@3sixty/authorization-service';
 
 const service = new AuthorizationService({
   config: {
@@ -60,7 +60,7 @@ console.log(policiesForSubject.length); // 2
 ```
 
 ```typescript
-import { AuthorizationService } from '@twin.org/authorization-service';
+import { AuthorizationService } from '@3sixty/authorization-service';
 
 const service = new AuthorizationService({
   config: {

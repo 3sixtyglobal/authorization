@@ -5,7 +5,7 @@ These examples demonstrate how to call authorization endpoints through the clien
 ## AuthorizationRestClient
 
 ```typescript
-import { AuthorizationRestClient } from '@twin.org/authorization-rest-client';
+import { AuthorizationRestClient } from '@3sixty/authorization-rest-client';
 
 const client = new AuthorizationRestClient({
   endpoint: 'https://api.example.net'
@@ -15,7 +15,7 @@ console.log(client.className()); // "AuthorizationRestClient"
 ```
 
 ```typescript
-import { AuthorizationRestClient } from '@twin.org/authorization-rest-client';
+import { AuthorizationRestClient } from '@3sixty/authorization-rest-client';
 
 const client = new AuthorizationRestClient({
   endpoint: 'https://api.example.net'
@@ -34,7 +34,7 @@ await client.removePolicy({ subject: 'admin', object: 'reports', action: 'delete
 ```
 
 ```typescript
-import { AuthorizationRestClient } from '@twin.org/authorization-rest-client';
+import { AuthorizationRestClient } from '@3sixty/authorization-rest-client';
 
 const client = new AuthorizationRestClient({
   endpoint: 'https://api.example.net'
@@ -54,7 +54,7 @@ console.log(policiesForViewer.length); // 2
 ```
 
 ```typescript
-import { AuthorizationRestClient } from '@twin.org/authorization-rest-client';
+import { AuthorizationRestClient } from '@3sixty/authorization-rest-client';
 
 const client = new AuthorizationRestClient({
   endpoint: 'https://api.example.net'

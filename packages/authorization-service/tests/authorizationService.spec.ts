@@ -7,15 +7,15 @@ import {
 	type AuthorizationRoleName,
 	EntityStorageAuthorizationConnector,
 	initSchema
-} from "@twin.org/authorization-connector-entity-storage";
+} from "@3sixty/authorization-connector-entity-storage";
 import {
 	AuthorizationConnectorFactory,
 	type IAuthorizationPolicy
-} from "@twin.org/authorization-models";
-import { ContextIdKeys, ContextIdStore } from "@twin.org/context";
-import { MemoryEntityStorageConnector } from "@twin.org/entity-storage-connector-memory";
-import { EntityStorageConnectorFactory } from "@twin.org/entity-storage-models";
-import { nameof } from "@twin.org/nameof";
+} from "@3sixty/authorization-models";
+import { ContextIdKeys, ContextIdStore } from "@3sixty/context";
+import { MemoryEntityStorageConnector } from "@3sixty/entity-storage-connector-memory";
+import { EntityStorageConnectorFactory } from "@3sixty/entity-storage-models";
+import { nameof } from "@3sixty/nameof";
 import { AuthorizationService } from "../src/authorizationService.js";
 
 const TEST_NAMESPACE = "test";

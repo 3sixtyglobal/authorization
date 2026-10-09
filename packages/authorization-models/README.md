@@ -1,11 +1,11 @@
-# @twin.org/authorization-models
+# @3sixty/authorization-models
 
 This package defines the shared interfaces and contract models that underpin authorisation flows across connectors, services, and clients in this repository.
 
 ## Installation
 
 ```shell
-npm install @twin.org/authorization-models
+npm install @3sixty/authorization-models
 ```
 
 ## Examples

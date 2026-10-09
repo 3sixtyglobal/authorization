@@ -1,4 +1,4 @@
-# @twin.org/authorization
+# @3sixty/authorization
 
 This repository provides the building blocks for policy-driven authorisation in TWIN systems, combining shared models, connector implementations, service endpoints, and a client layer that can be composed in different deployment shapes.
 

@@ -4,14 +4,14 @@ import type {
 	IAuthorizationConnector,
 	IAuthorizationModel,
 	IAuthorizationPolicy
-} from "@twin.org/authorization-models";
-import { BaseError, GeneralError, Guards, Is } from "@twin.org/core";
-import { ComparisonOperator, LogicalOperator, SortDirection } from "@twin.org/entity";
+} from "@3sixty/authorization-models";
+import { BaseError, GeneralError, Guards, Is } from "@3sixty/core";
+import { ComparisonOperator, LogicalOperator, SortDirection } from "@3sixty/entity";
 import {
 	EntityStorageConnectorFactory,
 	type IEntityStorageConnector
-} from "@twin.org/entity-storage-models";
-import { nameof } from "@twin.org/nameof";
+} from "@3sixty/entity-storage-models";
+import { nameof } from "@3sixty/nameof";
 import { AuthorizationPolicy } from "./entities/authorizationPolicy.js";
 import { AuthorizationRoleAssignment } from "./entities/authorizationRoleAssignment.js";
 import { AuthorizationRoleInheritance } from "./entities/authorizationRoleInheritance.js";

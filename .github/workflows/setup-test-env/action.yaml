@@ -18,7 +18,7 @@ runs:
       if: inputs.package == 'packages/authorization-connector-casbin' || inputs.package == 'all'
       shell: bash
       run: |
-        CONTAINER_NAME="twin-authorization-casbin"
+        CONTAINER_NAME="3sixty-authorization-casbin"
 
         docker rm -f "$CONTAINER_NAME" || true
         docker rmi casbin/casdoor-all-in-one:latest || true

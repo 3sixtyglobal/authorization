@@ -1,4 +1,4 @@
-# @twin.org/authorization-rest-client
+# @3sixty/authorization-rest-client
 
 ## Classes
 

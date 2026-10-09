@@ -1,8 +1,8 @@
 {
 	"openapi": "3.1.1",
 	"info": {
-		"title": "TWIN - Test Endpoints",
-		"description": "REST API for TWIN - Test Endpoints.",
+		"title": "3Sixty - Test Endpoints",
+		"description": "REST API for 3Sixty - Test Endpoints.",
 		"version": "1.0.0",
 		"license": {
 			"name": "Apache 2.0 License",
@@ -63,7 +63,7 @@
 									"verifiableStorageCreateResponseExample": {
 										"value": {
 											"receipt": {
-												"@context": "https://schema.twindev.org/verifiable-storage/",
+												"@context": "https://schema.3sixty.global/verifiable-storage/",
 												"type": "VerifiableStorageIotaReceipt2026"
 											},
 											"id": "verifiable:iota:aW90YS1uZnQ6dHN0OjB4NzYyYjljNDllYTg2OWUwZWJkYTliYmZhNzY5Mzk0NDdhNDI4ZGNmMTc4YzVkMTVhYjQ0N2UyZDRmYmJiNGViMg=="
@@ -190,12 +190,12 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"$ref": "https://schema.twindev.org/json-ld/JsonLdNodeObject"
+									"$ref": "https://schema.3sixty.global/json-ld/JsonLdNodeObject"
 								},
 								"examples": {
 									"verifiableStorageUpdateResponseExample": {
 										"value": {
-											"@context": "https://schema.twindev.org/verifiable-storage/",
+											"@context": "https://schema.3sixty.global/verifiable-storage/",
 											"type": "VerifiableStorageIotaReceipt2026"
 										}
 									}
@@ -538,7 +538,7 @@
 				"type": "object",
 				"properties": {
 					"receipt": {
-						"$ref": "https://schema.twindev.org/json-ld/JsonLdNodeObject"
+						"$ref": "https://schema.3sixty.global/json-ld/JsonLdNodeObject"
 					},
 					"id": {
 						"type": "string",
@@ -571,7 +571,7 @@
 				"type": "object",
 				"properties": {
 					"receipt": {
-						"$ref": "https://schema.twindev.org/json-ld/JsonLdNodeObject"
+						"$ref": "https://schema.3sixty.global/json-ld/JsonLdNodeObject"
 					},
 					"data": {
 						"type": "string",

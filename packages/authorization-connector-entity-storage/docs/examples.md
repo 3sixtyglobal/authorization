@@ -5,7 +5,7 @@ These examples demonstrate how to manage policies, role assignments, and role in
 ## EntityStorageAuthorizationConnector
 
 ```typescript
-import { EntityStorageAuthorizationConnector } from '@twin.org/authorization-connector-entity-storage';
+import { EntityStorageAuthorizationConnector } from '@3sixty/authorization-connector-entity-storage';
 
 const connector = new EntityStorageAuthorizationConnector();
 console.log(connector.className()); // "EntityStorageAuthorizationConnector"
@@ -29,7 +29,7 @@ await connector.removePolicy({
 ```
 
 ```typescript
-import { EntityStorageAuthorizationConnector } from '@twin.org/authorization-connector-entity-storage';
+import { EntityStorageAuthorizationConnector } from '@3sixty/authorization-connector-entity-storage';
 
 const connector = new EntityStorageAuthorizationConnector();
 
@@ -44,7 +44,7 @@ console.log(childRoles); // ["editor"]
 ```
 
 ```typescript
-import { EntityStorageAuthorizationConnector } from '@twin.org/authorization-connector-entity-storage';
+import { EntityStorageAuthorizationConnector } from '@3sixty/authorization-connector-entity-storage';
 
 const connector = new EntityStorageAuthorizationConnector();
 
@@ -64,7 +64,7 @@ console.log(policiesForViewer.length); // 2
 ```
 
 ```typescript
-import { EntityStorageAuthorizationConnector } from '@twin.org/authorization-connector-entity-storage';
+import { EntityStorageAuthorizationConnector } from '@3sixty/authorization-connector-entity-storage';
 
 const connector = new EntityStorageAuthorizationConnector();
 

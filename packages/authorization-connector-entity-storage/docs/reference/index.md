@@ -1,4 +1,4 @@
-# @twin.org/authorization-connector-entity-storage
+# @3sixty/authorization-connector-entity-storage
 
 ## Classes
 

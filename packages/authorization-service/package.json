@@ -1,10 +1,10 @@
 {
-	"name": "@twin.org/authorization-service",
-	"version": "0.10.1-next.0",
+	"name": "@3sixty/authorization-service",
+	"version": "0.20.0-next.0",
 	"description": "Service layer for exposing authorisation operations through HTTP APIs.",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/3sixtyglobal/twin-authorization.git",
+		"url": "git+https://github.com/3sixtyglobal/authorization.git",
 		"directory": "packages/authorization-service"
 	},
 	"author": "martyn.janes@iota.org",
@@ -29,23 +29,23 @@
 		"dist:no-test": "pnpm run clean && concurrently -g -n build,locales,types \"pnpm run build\" \"pnpm run validate-locales\" \"pnpm run test:build\""
 	},
 	"dependencies": {
-		"@twin.org/api-models": "next",
-		"@twin.org/authorization-models": "0.10.1-next.0",
-		"@twin.org/context": "next",
-		"@twin.org/core": "next",
-		"@twin.org/logging-models": "next",
-		"@twin.org/nameof": "next",
-		"@twin.org/telemetry-models": "next",
-		"@twin.org/web": "next"
+		"@3sixty/api-models": "next",
+		"@3sixty/authorization-models": "0.20.0-next.0",
+		"@3sixty/context": "next",
+		"@3sixty/core": "next",
+		"@3sixty/logging-models": "next",
+		"@3sixty/nameof": "next",
+		"@3sixty/telemetry-models": "next",
+		"@3sixty/web": "next"
 	},
 	"devDependencies": {
-		"@twin.org/authorization-connector-entity-storage": "0.10.1-next.0",
-		"@twin.org/entity-storage-connector-memory": "next",
-		"@twin.org/entity-storage-models": "next",
-		"@twin.org/nameof-transformer": "next",
-		"@twin.org/nameof-vitest-plugin": "next",
-		"@twin.org/ts-to-openapi": "next",
-		"@twin.org/validate-locales": "next",
+		"@3sixty/authorization-connector-entity-storage": "0.20.0-next.0",
+		"@3sixty/entity-storage-connector-memory": "next",
+		"@3sixty/entity-storage-models": "next",
+		"@3sixty/nameof-transformer": "next",
+		"@3sixty/nameof-vitest-plugin": "next",
+		"@3sixty/ts-to-openapi": "next",
+		"@3sixty/validate-locales": "next",
 		"@types/node": "26.6.2",
 		"@vitest/coverage-v8": "5.0.1",
 		"concurrently": "10.0.5",
@@ -79,7 +79,7 @@
 		"service"
 	],
 	"bugs": {
-		"url": "git+https://github.com/3sixtyglobal/twin-authorization/issues"
+		"url": "git+https://github.com/3sixtyglobal/authorization/issues"
 	},
-	"homepage": "https://twindev.org"
+	"homepage": "https://3sixty.global"
 }

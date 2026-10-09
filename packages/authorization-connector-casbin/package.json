@@ -1,10 +1,10 @@
 {
-	"name": "@twin.org/authorization-connector-casbin",
-	"version": "0.10.1-next.0",
+	"name": "@3sixty/authorization-connector-casbin",
+	"version": "0.20.0-next.0",
 	"description": "Authorisation connector that evaluates policies using Casbin-compatible services.",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/3sixtyglobal/twin-authorization.git",
+		"url": "git+https://github.com/3sixtyglobal/authorization.git",
 		"directory": "packages/authorization-connector-casbin"
 	},
 	"author": "martyn.janes@iota.org",
@@ -28,17 +28,17 @@
 		"dist:no-test": "pnpm run clean && concurrently -g -n build,locales,types \"pnpm run build\" \"pnpm run validate-locales\" \"pnpm run test:build\""
 	},
 	"dependencies": {
-		"@twin.org/authorization-models": "0.10.1-next.0",
-		"@twin.org/context": "next",
-		"@twin.org/core": "next",
-		"@twin.org/logging-models": "next",
-		"@twin.org/nameof": "next",
-		"@twin.org/web": "next"
+		"@3sixty/authorization-models": "0.20.0-next.0",
+		"@3sixty/context": "next",
+		"@3sixty/core": "next",
+		"@3sixty/logging-models": "next",
+		"@3sixty/nameof": "next",
+		"@3sixty/web": "next"
 	},
 	"devDependencies": {
-		"@twin.org/nameof-transformer": "next",
-		"@twin.org/nameof-vitest-plugin": "next",
-		"@twin.org/validate-locales": "next",
+		"@3sixty/nameof-transformer": "next",
+		"@3sixty/nameof-vitest-plugin": "next",
+		"@3sixty/validate-locales": "next",
 		"@types/node": "26.6.2",
 		"@vitest/coverage-v8": "5.0.1",
 		"concurrently": "10.0.5",
@@ -73,7 +73,7 @@
 		"casbin"
 	],
 	"bugs": {
-		"url": "git+https://github.com/3sixtyglobal/twin-authorization/issues"
+		"url": "git+https://github.com/3sixtyglobal/authorization/issues"
 	},
-	"homepage": "https://twindev.org"
+	"homepage": "https://3sixty.global"
 }

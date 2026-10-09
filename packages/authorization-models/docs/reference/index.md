@@ -1,4 +1,4 @@
-# @twin.org/authorization-models
+# @3sixty/authorization-models
 
 ## Interfaces
 

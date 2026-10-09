@@ -1,7 +1,7 @@
 // Copyright 2026 IOTA Stiftung.
 // SPDX-License-Identifier: Apache-2.0.
-import { BaseRestClient } from "@twin.org/api-core";
-import type { IBaseRestClientConfig, INoContentResponse } from "@twin.org/api-models";
+import { BaseRestClient } from "@3sixty/api-core";
+import type { IBaseRestClientConfig, INoContentResponse } from "@3sixty/api-models";
 import type {
 	IAuthorizationAddPolicyRequest,
 	IAuthorizationAddRoleForSubjectRequest,
@@ -34,10 +34,10 @@ import type {
 	IAuthorizationRemovePolicyRequest,
 	IAuthorizationRemoveRoleForSubjectRequest,
 	IAuthorizationRemoveRoleInheritanceRequest
-} from "@twin.org/authorization-models";
-import { Guards } from "@twin.org/core";
-import { nameof } from "@twin.org/nameof";
-import { HttpMethod } from "@twin.org/web";
+} from "@3sixty/authorization-models";
+import { Guards } from "@3sixty/core";
+import { nameof } from "@3sixty/nameof";
+import { HttpMethod } from "@3sixty/web";
 
 /**
  * Client for performing authorization operations through to REST endpoints.

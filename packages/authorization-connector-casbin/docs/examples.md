@@ -5,7 +5,7 @@ These examples show how to connect to a Casbin-compatible endpoint, bootstrap co
 ## CasbinAuthorizationConnector
 
 ```typescript
-import { CasbinAuthorizationConnector } from '@twin.org/authorization-connector-casbin';
+import { CasbinAuthorizationConnector } from '@3sixty/authorization-connector-casbin';
 
 const connector = new CasbinAuthorizationConnector({
   config: {
@@ -22,7 +22,7 @@ console.log(connected); // true
 ```
 
 ```typescript
-import { CasbinAuthorizationConnector } from '@twin.org/authorization-connector-casbin';
+import { CasbinAuthorizationConnector } from '@3sixty/authorization-connector-casbin';
 
 const connector = new CasbinAuthorizationConnector({
   config: {
@@ -42,7 +42,7 @@ await connector.removePolicy('admin', 'reports', 'delete');
 ```
 
 ```typescript
-import { CasbinAuthorizationConnector } from '@twin.org/authorization-connector-casbin';
+import { CasbinAuthorizationConnector } from '@3sixty/authorization-connector-casbin';
 
 const connector = new CasbinAuthorizationConnector({
   config: {
@@ -67,7 +67,7 @@ console.log(policiesForViewer.entities.length); // 2
 ```
 
 ```typescript
-import { CasbinAuthorizationConnector } from '@twin.org/authorization-connector-casbin';
+import { CasbinAuthorizationConnector } from '@3sixty/authorization-connector-casbin';
 
 const connector = new CasbinAuthorizationConnector({
   config: {

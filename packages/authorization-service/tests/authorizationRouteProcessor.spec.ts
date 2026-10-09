@@ -1,6 +1,6 @@
 // Copyright 2026 IOTA Stiftung.
 // SPDX-License-Identifier: Apache-2.0.
-import type { IBaseRoute, IHttpResponse, IHttpServerRequest } from "@twin.org/api-models";
+import type { IBaseRoute, IHttpResponse, IHttpServerRequest } from "@3sixty/api-models";
 import {
 	type AuthorizationPolicy,
 	type AuthorizationRoleAssignment,
@@ -8,17 +8,17 @@ import {
 	type AuthorizationRoleName,
 	EntityStorageAuthorizationConnector,
 	initSchema
-} from "@twin.org/authorization-connector-entity-storage";
+} from "@3sixty/authorization-connector-entity-storage";
 import {
 	AuthorizationConnectorFactory,
 	type IAuthorizationModel
-} from "@twin.org/authorization-models";
-import { ContextIdKeys, ContextIdStore, type IContextIds } from "@twin.org/context";
-import { ComponentFactory } from "@twin.org/core";
-import { MemoryEntityStorageConnector } from "@twin.org/entity-storage-connector-memory";
-import { EntityStorageConnectorFactory } from "@twin.org/entity-storage-models";
-import { nameof } from "@twin.org/nameof";
-import { HttpStatusCode } from "@twin.org/web";
+} from "@3sixty/authorization-models";
+import { ContextIdKeys, ContextIdStore, type IContextIds } from "@3sixty/context";
+import { ComponentFactory } from "@3sixty/core";
+import { MemoryEntityStorageConnector } from "@3sixty/entity-storage-connector-memory";
+import { EntityStorageConnectorFactory } from "@3sixty/entity-storage-models";
+import { nameof } from "@3sixty/nameof";
+import { HttpStatusCode } from "@3sixty/web";
 import { authorizationAddRoleForSubject } from "../src/authorizationRoutes.js";
 import { AuthorizationService } from "../src/authorizationService.js";
 import { AuthorizationRouteProcessor } from "../src/processors/authorizationRouteProcessor.js";
