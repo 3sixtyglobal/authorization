@@ -633,6 +633,8 @@ jobs:
       # Setup pnpm after node, the runners have no system node for its installer to use.
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
+        with:
+          cache: true
 
       # Install so pnpm can resolve the workspace graph. Scripts are skipped because
       # only the project list is needed here, nothing is built in this job. Retried
@@ -702,6 +704,8 @@ jobs:
       # Setup pnpm after node, the runners have no system node for its installer to use.
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
+        with:
+          cache: true
 
       - name: Setup Test Environment
         uses: ./.github/workflows/setup-test-env
@@ -770,7 +774,7 @@ jobs:
             echo "Package is marked as private, skipping publication"
             echo "published=false" >> $GITHUB_OUTPUT
           else
-            npm publish "${{ steps.pack_npm_package.outputs.tarball_filename }}" --access public --tag latest
+            npm publish "${{ steps.pack_npm_package.outputs.tarball_filename }}" --access public --tag latest ${{ !github.event.repository.private && '--provenance' || '' }}
             echo "published=true" >> $GITHUB_OUTPUT
           fi
         env:
@@ -832,6 +836,8 @@ jobs:
       # Setup pnpm after node, the runners have no system node for its installer to use.
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
+        with:
+          cache: true
 
       - name: Release Please
         run: |
