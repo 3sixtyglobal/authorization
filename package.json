@@ -1,5 +1,5 @@
 {
-	"name": "@3sixty/authorization",
+	"name": "3sixty-authorization",
 	"version": "0.0.0",
 	"description": "Repository of authorization models, connectors, and service contracts.",
 	"repository": {
