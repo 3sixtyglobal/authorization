@@ -6,7 +6,12 @@ import type {
 	IAuthorizationPolicy
 } from "@3sixty/authorization-models";
 import { BaseError, GeneralError, Guards, Is } from "@3sixty/core";
-import { ComparisonOperator, LogicalOperator, SortDirection } from "@3sixty/entity";
+import {
+	ComparisonOperator,
+	type EntityCondition,
+	LogicalOperator,
+	SortDirection
+} from "@3sixty/entity";
 import {
 	EntityStorageConnectorFactory,
 	type IEntityStorageConnector
@@ -140,7 +145,11 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 				return true;
 			}
 
-			const roleResult = await this._authorizationRoleAssignmentEntityStorage.query(
+			// Each level of the role graph is resolved with a single join against the policies, so
+			// the number of requests grows with the depth of the inheritance not the number of roles.
+			let level = await this.joinRolePolicies(
+				this._authorizationRoleAssignmentEntityStorage,
+				"role",
 				{
 					logicalOperator: LogicalOperator.And,
 					conditions: [
@@ -148,47 +157,38 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 						{ property: "subject", value: subject, comparison: ComparisonOperator.Equals }
 					]
 				},
-				undefined,
-				["role"]
+				modelId,
+				object,
+				action
 			);
-
-			const queue: string[] = roleResult.entities
-				.map(e => e.role)
-				.filter((r): r is string => r !== undefined);
 			const visited = new Set<string>();
 
-			while (queue.length > 0) {
-				const nextRole = queue.shift();
-				if (nextRole !== undefined && !visited.has(nextRole)) {
-					visited.add(nextRole);
-
-					const rolePolicy = await this._authorizationPolicyEntityStorage.get(
-						this.policyId(modelId, nextRole, object, action)
-					);
-					if (rolePolicy) {
-						return true;
-					}
-
-					const parentResult = await this._authorizationRoleInheritanceEntityStorage.query(
-						{
-							logicalOperator: LogicalOperator.And,
-							conditions: [
-								{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
-								{ property: "role", value: nextRole, comparison: ComparisonOperator.Equals }
-							]
-						},
-						undefined,
-						["inheritsFrom"]
-					);
-					for (const entry of parentResult.entities) {
-						if (entry.inheritsFrom !== undefined && !visited.has(entry.inheritsFrom)) {
-							queue.push(entry.inheritsFrom);
-						}
-					}
+			while (!level.granted) {
+				const frontier = level.roles.filter(r => !visited.has(r));
+				if (frontier.length === 0) {
+					return false;
 				}
+				for (const r of frontier) {
+					visited.add(r);
+				}
+
+				level = await this.joinRolePolicies(
+					this._authorizationRoleInheritanceEntityStorage,
+					"inheritsFrom",
+					{
+						logicalOperator: LogicalOperator.And,
+						conditions: [
+							{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
+							{ property: "role", value: frontier, comparison: ComparisonOperator.In }
+						]
+					},
+					modelId,
+					object,
+					action
+				);
 			}
 
-			return false;
+			return true;
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -882,6 +882,64 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 				fieldName
 			});
 		}
+	}
+
+	/**
+	 * Join the matching role entries to the policies granting the object and action to their role.
+	 * @param storage The storage holding the role entries.
+	 * @param roleProperty The property on the role entries holding the role to join on.
+	 * @param conditions The conditions to match for the role entries.
+	 * @param modelId The model identifier.
+	 * @param object The object being accessed.
+	 * @param action The action to check.
+	 * @returns Whether any role is granted the action, otherwise the roles which were matched.
+	 * @internal
+	 */
+	private async joinRolePolicies<T>(
+		storage: IEntityStorageConnector<T>,
+		roleProperty: keyof T,
+		conditions: EntityCondition<T>,
+		modelId: string,
+		object: string,
+		action: string
+	): Promise<{ granted: boolean; roles: string[] }> {
+		const roles: string[] = [];
+		let cursor: string | undefined;
+
+		do {
+			const result = await storage.queryJoin<AuthorizationPolicy>(
+				this._authorizationPolicyEntityStorage,
+				{
+					property: roleProperty,
+					joinProperty: "subject",
+					conditions,
+					properties: [roleProperty],
+					joinConditions: {
+						logicalOperator: LogicalOperator.And,
+						conditions: [
+							{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
+							{ property: "object", value: object, comparison: ComparisonOperator.Equals },
+							{ property: "action", value: action, comparison: ComparisonOperator.Equals }
+						]
+					},
+					joinProperties: ["id"],
+					cursor
+				}
+			);
+
+			for (const entity of result.entities) {
+				if (entity.joined.length > 0) {
+					return { granted: true, roles };
+				}
+				const role = entity[roleProperty];
+				if (Is.stringValue(role)) {
+					roles.push(role);
+				}
+			}
+			cursor = result.cursor;
+		} while (Is.stringValue(cursor));
+
+		return { granted: false, roles };
 	}
 
 	/**

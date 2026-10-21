@@ -296,6 +296,58 @@ describe("EntityStorageAuthorizationConnector", () => {
 			);
 		});
 
+		test("returns true when only one of several assigned roles has a matching policy", async () => {
+			await connector.addPolicy(TEST_MODEL_ID, "auditor", "report", "read");
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "auditor");
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "viewer");
+			await expect(connector.check(TEST_MODEL_ID, "alice", "report", "read")).resolves.toBe(true);
+		});
+
+		test("returns true via a role reached through a cycle", async () => {
+			await connector.addPolicy(TEST_MODEL_ID, "c", "document", "read");
+			await connector.addRoleInheritance(TEST_MODEL_ID, "a", "b");
+			await connector.addRoleInheritance(TEST_MODEL_ID, "b", "a");
+			await connector.addRoleInheritance(TEST_MODEL_ID, "b", "c");
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "a");
+			await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(true);
+		});
+
+		test("returns true via a diamond role inheritance", async () => {
+			await connector.addPolicy(TEST_MODEL_ID, "base", "document", "read");
+			await connector.addRoleInheritance(TEST_MODEL_ID, "top", "left");
+			await connector.addRoleInheritance(TEST_MODEL_ID, "top", "right");
+			await connector.addRoleInheritance(TEST_MODEL_ID, "left", "base");
+			await connector.addRoleInheritance(TEST_MODEL_ID, "right", "base");
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "top");
+			await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(true);
+		});
+
+		test("ignores role policies from a different model", async () => {
+			await connector.addPolicy("other-model", "admin", "report", "delete");
+			await connector.addPolicy("other-model", "viewer", "document", "read");
+			await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "admin");
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
+			await expect(connector.check(TEST_MODEL_ID, "alice", "report", "delete")).resolves.toBe(
+				false
+			);
+			await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(
+				false
+			);
+		});
+
+		test("returns true when the granting role is beyond the first page of roles", async () => {
+			for (let i = 0; i < 120; i++) {
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", `role-${i}`);
+			}
+			await connector.addPolicy(TEST_MODEL_ID, "role-99", "document", "read");
+			await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(true);
+			await expect(connector.check(TEST_MODEL_ID, "alice", "document", "write")).resolves.toBe(
+				false
+			);
+		});
+
 		test("throws when subject is empty", async () => {
 			await expect(connector.check(TEST_MODEL_ID, "", "document", "read")).rejects.toThrow();
 		});
