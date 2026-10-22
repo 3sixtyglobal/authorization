@@ -14,6 +14,34 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Start PostgreSQL
+      if: inputs.package == 'packages/authorization-connector-entity-storage' || inputs.package == 'all'
+      shell: bash
+      run: |
+        CONTAINER_NAME="3sixty-entity-storage-postgresql"
+
+        docker rm -f "$CONTAINER_NAME" || true
+        docker pull postgres:latest
+
+        docker run -d \
+          --name "$CONTAINER_NAME" \
+          -e POSTGRES_USER=postgres \
+          -e POSTGRES_PASSWORD=password \
+          -p 5432:5432 \
+          postgres:latest
+
+        for i in {1..60}; do
+          if docker exec "$CONTAINER_NAME" pg_isready -h 127.0.0.1 -U postgres > /dev/null 2>&1; then
+            echo "PostgreSQL is ready."
+            exit 0
+          fi
+          sleep 1
+        done
+
+        echo "PostgreSQL did not become ready in time."
+        docker logs "$CONTAINER_NAME" || true
+        exit 1
+
     - name: Start Casdoor
       if: inputs.package == 'packages/authorization-connector-casbin' || inputs.package == 'all'
       shell: bash

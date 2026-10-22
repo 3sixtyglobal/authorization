@@ -156,7 +156,7 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 				{}
 			);
 
-			expect(response.statusCode).toBe(HttpStatusCode.unauthorized);
+			expect(response.statusCode).toBe(HttpStatusCode.forbidden);
 		});
 	});
 
@@ -194,7 +194,7 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 				{}
 			);
 
-			expect(response.statusCode).toBe(HttpStatusCode.unauthorized);
+			expect(response.statusCode).toBe(HttpStatusCode.forbidden);
 		});
 
 		test("allows when one of the userId's multiple assigned roles has a matching policy", async () => {
@@ -232,7 +232,7 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 				{}
 			);
 
-			expect(response.statusCode).toBe(HttpStatusCode.unauthorized);
+			expect(response.statusCode).toBe(HttpStatusCode.forbidden);
 		});
 
 		test("applies multiple policies and role assignments", async () => {
@@ -326,7 +326,7 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 				{}
 			);
 
-			expect(response.statusCode).toBe(HttpStatusCode.unauthorized);
+			expect(response.statusCode).toBe(HttpStatusCode.forbidden);
 		});
 
 		test("allows when one of the userId's role chains satisfies while another does not", async () => {
@@ -377,7 +377,7 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 				{}
 			);
 
-			expect(response.statusCode).toBe(HttpStatusCode.unauthorized);
+			expect(response.statusCode).toBe(HttpStatusCode.forbidden);
 		});
 
 		test("skips the check entirely when no route is matched", async () => {
@@ -423,6 +423,34 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 
 			expect(response.statusCode).toBe(HttpStatusCode.unauthorized);
 			expect(response.body).toBe(originalBody);
+		});
+
+		test("returns internal server error when the route has no operationId", async () => {
+			const response = makeResponse();
+			await processor.pre(
+				makeRequest(),
+				response,
+				{ path: "/api/test", operationId: "" },
+				makeContextIds("user-alice"),
+				{}
+			);
+
+			expect(response.statusCode).toBe(HttpStatusCode.internalServerError);
+		});
+
+		test("fails closed with internal server error when the check throws", async () => {
+			vi.spyOn(service, "check").mockRejectedValueOnce(new Error("connector down"));
+
+			const response = makeResponse();
+			await processor.pre(
+				makeRequest(),
+				response,
+				makeRoute("secureAction"),
+				makeContextIds("user-alice"),
+				{}
+			);
+
+			expect(response.statusCode).toBe(HttpStatusCode.internalServerError);
 		});
 	});
 

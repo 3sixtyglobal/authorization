@@ -13,6 +13,7 @@ import {
 	type IAuthorizationPolicy
 } from "@3sixty/authorization-models";
 import { ContextIdKeys, ContextIdStore } from "@3sixty/context";
+import { GeneralError } from "@3sixty/core";
 import { MemoryEntityStorageConnector } from "@3sixty/entity-storage-connector-memory";
 import { EntityStorageConnectorFactory } from "@3sixty/entity-storage-models";
 import { nameof } from "@3sixty/nameof";
@@ -1045,6 +1046,258 @@ describe("AuthorizationService", () => {
 					service.addRoleForSubject(TEST_MODEL_ID, "user-bob", "super-editor")
 				).rejects.toThrow();
 			});
+		});
+
+		test("holder can assign a role to themselves", async () => {
+			const service = await makePrivilegedService();
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-priv" }, async () => {
+				await expect(
+					service.addRoleForSubject(TEST_MODEL_ID, "user-priv", "devops")
+				).resolves.toBeUndefined();
+			});
+		});
+
+		test("holder can remove a policy from the escalated privilege role", async () => {
+			const service = await makePrivilegedService();
+			await connector.addPolicy(TEST_MODEL_ID, PRIV_ROLE, "resource", "write");
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-priv" }, async () => {
+				await expect(
+					service.removePolicy(TEST_MODEL_ID, PRIV_ROLE, "resource", "write")
+				).resolves.toBeUndefined();
+			});
+		});
+	});
+
+	describe("self escalation guard", () => {
+		test("denies a caller assigning a role to themselves", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+				await expect(
+					service.addRoleForSubject(TEST_MODEL_ID, "user-admin", "devops")
+				).rejects.toThrow("escalationDenied");
+			});
+		});
+
+		test("denies granting a new role a policy and then assigning it to the caller", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+				await service.addPolicy(TEST_MODEL_ID, "new-role", "anything", "execute");
+				await expect(
+					service.addRoleForSubject(TEST_MODEL_ID, "user-admin", "new-role")
+				).rejects.toThrow("escalationDenied");
+			});
+			expect(await connector.check(TEST_MODEL_ID, "user-admin", "anything", "execute")).toBe(false);
+		});
+
+		test("denies making the caller's own role inherit from an unrelated role", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "user-admin-role");
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+				await expect(
+					service.addRoleInheritance(TEST_MODEL_ID, "user-admin-role", "ops-admin")
+				).rejects.toThrow("escalationDenied");
+			});
+		});
+
+		test("denies making an ancestor of the caller's role inherit from an unrelated role", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
+			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+				await expect(
+					service.addRoleInheritance(TEST_MODEL_ID, "viewer", "ops-admin")
+				).rejects.toThrow("escalationDenied");
+			});
+		});
+
+		test("allows a caller to remove their own role", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+				await expect(
+					service.removeRoleForSubject(TEST_MODEL_ID, "user-admin", "editor")
+				).resolves.toBeUndefined();
+			});
+		});
+
+		test("denies removing an unprivileged role from a subject holding the escalated privilege role", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await connector.addRoleForSubject(
+				TEST_MODEL_ID,
+				"user-global-admin",
+				AuthorizationService.DEFAULT_ESCALATED_PRIVILEGE_ROLE
+			);
+			await connector.addRoleForSubject(TEST_MODEL_ID, "user-global-admin", "viewer");
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+				await expect(
+					service.removeRoleForSubject(TEST_MODEL_ID, "user-global-admin", "viewer")
+				).rejects.toThrow("escalationDenied");
+			});
+		});
+	});
+
+	describe("removePolicy escalation guard", () => {
+		test("allows when no userId is in context", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await connector.addPolicy(TEST_MODEL_ID, "editor", "resource", "read");
+			await ContextIdStore.run({}, async () => {
+				await expect(
+					service.removePolicy(TEST_MODEL_ID, "editor", "resource", "read")
+				).resolves.toBeUndefined();
+			});
+		});
+
+		test("allows removing a policy from an unrelated role", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
+			await connector.addPolicy(TEST_MODEL_ID, "devops", "resource", "read");
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+				await expect(
+					service.removePolicy(TEST_MODEL_ID, "devops", "resource", "read")
+				).resolves.toBeUndefined();
+			});
+		});
+
+		test("denies removing a policy from the escalated privilege role", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			const privRole = AuthorizationService.DEFAULT_ESCALATED_PRIVILEGE_ROLE;
+			await connector.addPolicy(TEST_MODEL_ID, privRole, "resource", "write");
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+				await expect(
+					service.removePolicy(TEST_MODEL_ID, privRole, "resource", "write")
+				).rejects.toThrow("escalationDenied");
+			});
+		});
+
+		test("denies removing a policy from a role more privileged than the caller", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await connector.addRoleInheritance(TEST_MODEL_ID, "super-editor", "editor");
+			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
+			await connector.addPolicy(TEST_MODEL_ID, "super-editor", "resource", "write");
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+				await expect(
+					service.removePolicy(TEST_MODEL_ID, "super-editor", "resource", "write")
+				).rejects.toThrow("escalationDenied");
+			});
+		});
+
+		test("denies removing a policy from a user holding the escalated privilege role", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await connector.addRoleForSubject(
+				TEST_MODEL_ID,
+				"user-global-admin",
+				AuthorizationService.DEFAULT_ESCALATED_PRIVILEGE_ROLE
+			);
+			await connector.addPolicy(TEST_MODEL_ID, "user-global-admin", "resource", "write");
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+				await expect(
+					service.removePolicy(TEST_MODEL_ID, "user-global-admin", "resource", "write")
+				).rejects.toThrow("escalationDenied");
+			});
+		});
+
+		test("denies removing another owner's build policy when the caller cannot build", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await connector.addPolicy(TEST_MODEL_ID, "user-owner", "authorization", "build");
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-other" }, async () => {
+				await expect(
+					service.removePolicy(TEST_MODEL_ID, "user-owner", "authorization", "build")
+				).rejects.toThrow("escalationDenied");
+			});
+		});
+
+		test("allows a model owner to remove another build policy", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await connector.addPolicy(TEST_MODEL_ID, "user-owner", "authorization", "build");
+			await connector.addPolicy(TEST_MODEL_ID, "user-other", "authorization", "build");
+			await ContextIdStore.run({ [ContextIdKeys.User]: "user-owner" }, async () => {
+				await expect(
+					service.removePolicy(TEST_MODEL_ID, "user-other", "authorization", "build")
+				).resolves.toBeUndefined();
+			});
+		});
+	});
+
+	describe("validation", () => {
+		test("throws a GuardError for values containing the separator", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await expect(service.check(TEST_MODEL_ID, "a|b", "resource", "read")).rejects.toMatchObject({
+				name: "GuardError",
+				message: "authorizationService.containsSeparator"
+			});
+		});
+
+		test("build rejects policies containing the separator", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await expect(
+				service.build(TEST_MODEL_ID, {
+					policies: [{ subject: "a|b", object: "resource", action: "read" }]
+				})
+			).rejects.toMatchObject({ name: "GuardError" });
+		});
+
+		test("build rejects inheritances with empty roles", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await expect(
+				service.build(TEST_MODEL_ID, { roleInheritances: [{ role: "", inheritsFrom: "viewer" }] })
+			).rejects.toMatchObject({ name: "GuardError" });
+		});
+	});
+
+	describe("error propagation", () => {
+		test("wraps untyped connector errors with the operation context", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			vi.spyOn(connector, "getRolesForSubject").mockRejectedValueOnce(new Error("boom"));
+			await expect(service.getRolesForSubject(TEST_MODEL_ID, "user-bob")).rejects.toMatchObject({
+				name: "GeneralError",
+				message: "authorizationService.getRolesForSubjectFailed"
+			});
+		});
+
+		test("wraps connector general errors with the operation context", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			vi.spyOn(connector, "addPolicy").mockRejectedValueOnce(
+				new GeneralError("TestConnector", "addPolicyFailed")
+			);
+			await expect(
+				service.addPolicy(TEST_MODEL_ID, "editor", "resource", "read")
+			).rejects.toMatchObject({
+				name: "GeneralError",
+				message: "authorizationService.addPolicyFailed"
+			});
+		});
+	});
+
+	describe("check cache concurrency", () => {
+		test("does not keep a result loaded concurrently with a revocation", async () => {
+			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
+			await connector.addPolicy(TEST_MODEL_ID, "user-alice", "resource", "read");
+
+			const originalCheck = connector.check.bind(connector);
+			let markStarted: ((value: undefined) => void) | undefined;
+			let releaseCheck: ((value: undefined) => void) | undefined;
+			const started = new Promise<undefined>(resolve => {
+				markStarted = resolve;
+			});
+			const release = new Promise<undefined>(resolve => {
+				releaseCheck = resolve;
+			});
+			vi.spyOn(connector, "check").mockImplementationOnce(async (...args) => {
+				const result = await originalCheck(...args);
+				markStarted?.(undefined);
+				await release;
+				return result;
+			});
+
+			const inFlight = service.check(TEST_MODEL_ID, "user-alice", "resource", "read");
+			await started;
+			await service.removePolicy(TEST_MODEL_ID, "user-alice", "resource", "read");
+			releaseCheck?.(undefined);
+
+			expect(await inFlight).toBe(true);
+			expect(await service.check(TEST_MODEL_ID, "user-alice", "resource", "read")).toBe(false);
 		});
 	});
 });

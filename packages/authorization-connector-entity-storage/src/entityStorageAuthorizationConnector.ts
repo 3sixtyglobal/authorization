@@ -164,7 +164,7 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 			const visited = new Set<string>();
 
 			while (!level.granted) {
-				const frontier = level.roles.filter(r => !visited.has(r));
+				const frontier = [...new Set(level.roles)].filter(r => !visited.has(r));
 				if (frontier.length === 0) {
 					return false;
 				}
@@ -221,10 +221,12 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this.guardNoSeparator(nameof(subject), subject);
 		this.guardNoSeparator(nameof(object), object);
 		this.guardNoSeparator(nameof(action), action);
+		const id = this.policyId(modelId, subject, object, action);
+		this.guardIdLength(this._authorizationPolicyEntityStorage, id);
 
 		try {
 			const entity = new AuthorizationPolicy();
-			entity.id = this.policyId(modelId, subject, object, action);
+			entity.id = id;
 			entity.modelId = modelId;
 			entity.subject = subject;
 			entity.object = object;
@@ -425,14 +427,15 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		}
 
 		try {
-			return await Promise.all(
-				roles.map(async role => {
-					const entity = await this._authorizationRoleNameEntityStorage.get(
-						this.roleNameId(modelId, role)
-					);
-					return Is.notEmpty(entity);
-				})
+			const ids = [...new Set(roles.map(role => this.roleNameId(modelId, role)))];
+			const found = new Set(
+				await this.queryAllValues(
+					this._authorizationRoleNameEntityStorage,
+					{ property: "id", value: ids, comparison: ComparisonOperator.In },
+					"id"
+				)
 			);
+			return roles.map(role => found.has(this.roleNameId(modelId, role)));
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -458,21 +461,19 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this.guardNoSeparator(nameof(modelId), modelId);
 		this.guardNoSeparator(nameof(subject), subject);
 		this.guardNoSeparator(nameof(role), role);
+		const id = this.roleId(modelId, subject, role);
+		this.guardIdLength(this._authorizationRoleAssignmentEntityStorage, id);
+		const roleName = this.createRoleName(modelId, role);
 
 		try {
 			const assignment = new AuthorizationRoleAssignment();
-			assignment.id = this.roleId(modelId, subject, role);
+			assignment.id = id;
 			assignment.modelId = modelId;
 			assignment.subject = subject;
 			assignment.role = role;
-			const roleName = new AuthorizationRoleName();
-			roleName.id = this.roleNameId(modelId, role);
-			roleName.modelId = modelId;
-			roleName.name = role;
-			await Promise.all([
-				this._authorizationRoleAssignmentEntityStorage.set(assignment),
-				this._authorizationRoleNameEntityStorage.set(roleName)
-			]);
+			// Write the name first so a failure leaves at worst a stale name, never an unlisted grant.
+			await this._authorizationRoleNameEntityStorage.set(roleName);
+			await this._authorizationRoleAssignmentEntityStorage.set(assignment);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -529,22 +530,35 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this.guardNoSeparator(nameof(subject), subject);
 
 		try {
-			const result = await this._authorizationRoleAssignmentEntityStorage.query(
-				{
-					logicalOperator: LogicalOperator.And,
-					conditions: [
-						{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
-						{ property: "subject", value: subject, comparison: ComparisonOperator.Equals }
-					]
-				},
-				undefined,
-				["id", "role"]
-			);
-			const ids = result.entities.map(e => e.id).filter((id): id is string => id !== undefined);
-			const roles = result.entities.map(e => e.role).filter((r): r is string => r !== undefined);
-			if (ids.length > 0) {
-				await this._authorizationRoleAssignmentEntityStorage.removeBatch(ids);
-				await Promise.all(roles.map(async r => this.removeRoleNameIfUnreferenced(modelId, r)));
+			const roles = new Set<string>();
+			let hasMore: boolean;
+			// Always read the first page, as removing a page invalidates any offset based cursor.
+			do {
+				const result = await this._authorizationRoleAssignmentEntityStorage.query(
+					{
+						logicalOperator: LogicalOperator.And,
+						conditions: [
+							{ property: "modelId", value: modelId, comparison: ComparisonOperator.Equals },
+							{ property: "subject", value: subject, comparison: ComparisonOperator.Equals }
+						]
+					},
+					undefined,
+					["id", "role"]
+				);
+				const ids = result.entities.map(e => e.id).filter((id): id is string => id !== undefined);
+				for (const entity of result.entities) {
+					if (Is.stringValue(entity.role)) {
+						roles.add(entity.role);
+					}
+				}
+				if (ids.length > 0) {
+					await this._authorizationRoleAssignmentEntityStorage.removeBatch(ids);
+				}
+				hasMore = ids.length > 0 && Is.stringValue(result.cursor);
+			} while (hasMore);
+
+			for (const role of roles) {
+				await this.removeRoleNameIfUnreferenced(modelId, role);
 			}
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
@@ -571,7 +585,8 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this.guardNoSeparator(nameof(subject), subject);
 
 		try {
-			const result = await this._authorizationRoleAssignmentEntityStorage.query(
+			return await this.queryAllValues(
+				this._authorizationRoleAssignmentEntityStorage,
 				{
 					logicalOperator: LogicalOperator.And,
 					conditions: [
@@ -579,10 +594,8 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 						{ property: "subject", value: subject, comparison: ComparisonOperator.Equals }
 					]
 				},
-				undefined,
-				["role"]
+				"role"
 			);
-			return result.entities.map(e => e.role).filter((r): r is string => r !== undefined);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -608,7 +621,8 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this.guardNoSeparator(nameof(role), role);
 
 		try {
-			const result = await this._authorizationRoleAssignmentEntityStorage.query(
+			return await this.queryAllValues(
+				this._authorizationRoleAssignmentEntityStorage,
 				{
 					logicalOperator: LogicalOperator.And,
 					conditions: [
@@ -616,10 +630,8 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 						{ property: "role", value: role, comparison: ComparisonOperator.Equals }
 					]
 				},
-				undefined,
-				["subject"]
+				"subject"
 			);
-			return result.entities.map(e => e.subject).filter((s): s is string => s !== undefined);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -681,20 +693,19 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this.guardNoSeparator(nameof(role), role);
 		this.guardNoSeparator(nameof(inheritsFrom), inheritsFrom);
 
+		const id = this.inheritanceId(modelId, role, inheritsFrom);
+		this.guardIdLength(this._authorizationRoleInheritanceEntityStorage, id);
+		const inheritsFromNameEntity = this.createRoleName(modelId, inheritsFrom);
+
 		try {
 			const inheritance = new AuthorizationRoleInheritance();
-			inheritance.id = this.inheritanceId(modelId, role, inheritsFrom);
+			inheritance.id = id;
 			inheritance.modelId = modelId;
 			inheritance.role = role;
 			inheritance.inheritsFrom = inheritsFrom;
-			const inheritsFromNameEntity = new AuthorizationRoleName();
-			inheritsFromNameEntity.id = this.roleNameId(modelId, inheritsFrom);
-			inheritsFromNameEntity.modelId = modelId;
-			inheritsFromNameEntity.name = inheritsFrom;
-			await Promise.all([
-				this._authorizationRoleInheritanceEntityStorage.set(inheritance),
-				this._authorizationRoleNameEntityStorage.set(inheritsFromNameEntity)
-			]);
+			// Write the name first so a failure leaves at worst a stale name, never an unlisted grant.
+			await this._authorizationRoleNameEntityStorage.set(inheritsFromNameEntity);
+			await this._authorizationRoleInheritanceEntityStorage.set(inheritance);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -729,10 +740,8 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 			await this._authorizationRoleInheritanceEntityStorage.remove(
 				this.inheritanceId(modelId, role, inheritsFrom)
 			);
-			await Promise.all([
-				this.removeRoleNameIfUnreferenced(modelId, role),
-				this.removeRoleNameIfUnreferenced(modelId, inheritsFrom)
-			]);
+			await this.removeRoleNameIfUnreferenced(modelId, role);
+			await this.removeRoleNameIfUnreferenced(modelId, inheritsFrom);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -758,7 +767,8 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this.guardNoSeparator(nameof(role), role);
 
 		try {
-			const result = await this._authorizationRoleInheritanceEntityStorage.query(
+			return await this.queryAllValues(
+				this._authorizationRoleInheritanceEntityStorage,
 				{
 					logicalOperator: LogicalOperator.And,
 					conditions: [
@@ -766,10 +776,8 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 						{ property: "role", value: role, comparison: ComparisonOperator.Equals }
 					]
 				},
-				undefined,
-				["inheritsFrom"]
+				"inheritsFrom"
 			);
-			return result.entities.map(e => e.inheritsFrom).filter((r): r is string => r !== undefined);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -795,7 +803,8 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 		this.guardNoSeparator(nameof(role), role);
 
 		try {
-			const result = await this._authorizationRoleInheritanceEntityStorage.query(
+			return await this.queryAllValues(
+				this._authorizationRoleInheritanceEntityStorage,
 				{
 					logicalOperator: LogicalOperator.And,
 					conditions: [
@@ -803,10 +812,8 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 						{ property: "inheritsFrom", value: role, comparison: ComparisonOperator.Equals }
 					]
 				},
-				undefined,
-				["role"]
+				"role"
 			);
-			return result.entities.map(e => e.role).filter((r): r is string => r !== undefined);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -885,6 +892,70 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 	}
 
 	/**
+	 * Throw if the compound id exceeds the maximum length declared for the primary key.
+	 * @param storage The storage the id will be written to.
+	 * @param id The compound id to validate.
+	 * @throws GeneralError if the id is too long.
+	 * @internal
+	 */
+	private guardIdLength<T>(storage: IEntityStorageConnector<T>, id: string): void {
+		const maxLength = storage.getSchema().properties?.find(p => p.isPrimary)?.maxLength;
+		if (Is.integer(maxLength) && id.length > maxLength) {
+			throw new GeneralError(EntityStorageAuthorizationConnector.CLASS_NAME, "idTooLong", {
+				length: id.length,
+				maxLength
+			});
+		}
+	}
+
+	/**
+	 * Create a validated role name index entry.
+	 * @param modelId The model identifier.
+	 * @param name The role name.
+	 * @returns The role name entity.
+	 * @throws GeneralError if the id is too long.
+	 * @internal
+	 */
+	private createRoleName(modelId: string, name: string): AuthorizationRoleName {
+		const roleName = new AuthorizationRoleName();
+		roleName.id = this.roleNameId(modelId, name);
+		roleName.modelId = modelId;
+		roleName.name = name;
+		this.guardIdLength(this._authorizationRoleNameEntityStorage, roleName.id);
+		return roleName;
+	}
+
+	/**
+	 * Query every page of matching entities returning the string values of a single property.
+	 * @param storage The storage to query.
+	 * @param conditions The conditions to match.
+	 * @param property The property to project and return.
+	 * @returns The property values.
+	 * @internal
+	 */
+	private async queryAllValues<T>(
+		storage: IEntityStorageConnector<T>,
+		conditions: EntityCondition<T>,
+		property: keyof T
+	): Promise<string[]> {
+		const values: string[] = [];
+		let cursor: string | undefined;
+
+		do {
+			const result = await storage.query(conditions, undefined, [property], cursor);
+			for (const entity of result.entities) {
+				const value = entity[property];
+				if (Is.stringValue(value)) {
+					values.push(value);
+				}
+			}
+			cursor = result.cursor;
+		} while (Is.stringValue(cursor));
+
+		return values;
+	}
+
+	/**
 	 * Join the matching role entries to the policies granting the object and action to their role.
 	 * @param storage The storage holding the role entries.
 	 * @param roleProperty The property on the role entries holding the role to join on.
@@ -944,11 +1015,32 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 
 	/**
 	 * Remove a role name from the index if it no longer appears in any assignment or inheritance record.
+	 * Without transactions a concurrent add can still race the removal, so the references are
+	 * re-checked afterwards and the name restored if needed, this narrows but does not close the window.
 	 * @param modelId The model identifier.
 	 * @param roleName The role name to check.
 	 * @internal
 	 */
 	private async removeRoleNameIfUnreferenced(modelId: string, roleName: string): Promise<void> {
+		if (await this.isRoleNameReferenced(modelId, roleName)) {
+			return;
+		}
+
+		await this._authorizationRoleNameEntityStorage.remove(this.roleNameId(modelId, roleName));
+
+		if (await this.isRoleNameReferenced(modelId, roleName)) {
+			await this._authorizationRoleNameEntityStorage.set(this.createRoleName(modelId, roleName));
+		}
+	}
+
+	/**
+	 * Check whether a role name appears in any assignment or inheritance record.
+	 * @param modelId The model identifier.
+	 * @param roleName The role name to check.
+	 * @returns True if the role name is referenced.
+	 * @internal
+	 */
+	private async isRoleNameReferenced(modelId: string, roleName: string): Promise<boolean> {
 		const [assignmentResult, inheritanceChildResult, inheritanceParentResult] = await Promise.all([
 			this._authorizationRoleAssignmentEntityStorage.query(
 				{
@@ -991,12 +1083,10 @@ export class EntityStorageAuthorizationConnector implements IAuthorizationConnec
 			)
 		]);
 
-		if (
-			assignmentResult.entities.length === 0 &&
-			inheritanceChildResult.entities.length === 0 &&
-			inheritanceParentResult.entities.length === 0
-		) {
-			await this._authorizationRoleNameEntityStorage.remove(this.roleNameId(modelId, roleName));
-		}
+		return (
+			assignmentResult.entities.length > 0 ||
+			inheritanceChildResult.entities.length > 0 ||
+			inheritanceParentResult.entities.length > 0
+		);
 	}
 }

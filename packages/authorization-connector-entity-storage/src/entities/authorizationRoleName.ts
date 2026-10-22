@@ -22,6 +22,6 @@ export class AuthorizationRoleName {
 	/**
 	 * The role name.
 	 */
-	@property({ type: "string", maxLength: 256, isSecondary: true })
+	@property({ type: "string", maxLength: 128, isSecondary: true })
 	public name!: string;
 }

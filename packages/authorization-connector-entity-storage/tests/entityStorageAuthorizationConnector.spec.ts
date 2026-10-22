@@ -1,13 +1,8 @@
 // Copyright 2026 IOTA Stiftung.
 // SPDX-License-Identifier: Apache-2.0.
 import { ContextIdKeys, ContextIdStore } from "@3sixty/context";
-import { MemoryEntityStorageConnector } from "@3sixty/entity-storage-connector-memory";
-import { EntityStorageConnectorFactory } from "@3sixty/entity-storage-models";
-import { nameof } from "@3sixty/nameof";
-import type { AuthorizationPolicy } from "../src/entities/authorizationPolicy.js";
-import type { AuthorizationRoleAssignment } from "../src/entities/authorizationRoleAssignment.js";
-import type { AuthorizationRoleInheritance } from "../src/entities/authorizationRoleInheritance.js";
-import type { AuthorizationRoleName } from "../src/entities/authorizationRoleName.js";
+import type { IEntityStorageConnector } from "@3sixty/entity-storage-models";
+import { createTestStorages, teardownTestStorages, TEST_STORAGE_BACKENDS } from "./testStorage.js";
 import { EntityStorageAuthorizationConnector } from "../src/entityStorageAuthorizationConnector.js";
 import { initSchema } from "../src/schema.js";
 
@@ -18,56 +13,20 @@ import { initSchema } from "../src/schema.js";
 const TEST_TENANT_ID_A = "test-tenant-a";
 const TEST_TENANT_ID_B = "test-tenant-b";
 const TEST_MODEL_ID = "test-model";
+const TEST_OTHER_MODEL_ID = "other-model";
 
-describe("EntityStorageAuthorizationConnector", () => {
-	let policyStorage: MemoryEntityStorageConnector<AuthorizationPolicy>;
-	let roleStorage: MemoryEntityStorageConnector<AuthorizationRoleAssignment>;
-	let inheritanceStorage: MemoryEntityStorageConnector<AuthorizationRoleInheritance>;
-	let roleNameStorage: MemoryEntityStorageConnector<AuthorizationRoleName>;
+describe.each(TEST_STORAGE_BACKENDS)("EntityStorageAuthorizationConnector ($name)", backend => {
+	let storages: IEntityStorageConnector[];
 	let connector: EntityStorageAuthorizationConnector;
 
 	beforeEach(async () => {
 		initSchema();
-
-		policyStorage = new MemoryEntityStorageConnector<AuthorizationPolicy>({
-			entitySchema: nameof<AuthorizationPolicy>(),
-			config: { storageKey: "authorization-policy" }
-		});
-		await policyStorage.teardown();
-		EntityStorageConnectorFactory.register("authorization-policy", () => policyStorage);
-
-		roleStorage = new MemoryEntityStorageConnector<AuthorizationRoleAssignment>({
-			entitySchema: nameof<AuthorizationRoleAssignment>(),
-			config: { storageKey: "authorization-role-assignment" }
-		});
-		await roleStorage.teardown();
-		EntityStorageConnectorFactory.register("authorization-role-assignment", () => roleStorage);
-
-		inheritanceStorage = new MemoryEntityStorageConnector<AuthorizationRoleInheritance>({
-			entitySchema: nameof<AuthorizationRoleInheritance>(),
-			config: { storageKey: "authorization-role-inheritance" }
-		});
-		await inheritanceStorage.teardown();
-		EntityStorageConnectorFactory.register(
-			"authorization-role-inheritance",
-			() => inheritanceStorage
-		);
-
-		roleNameStorage = new MemoryEntityStorageConnector<AuthorizationRoleName>({
-			entitySchema: nameof<AuthorizationRoleName>(),
-			config: { storageKey: "authorization-role-name" }
-		});
-		await roleNameStorage.teardown();
-		EntityStorageConnectorFactory.register("authorization-role-name", () => roleNameStorage);
-
+		storages = await createTestStorages(backend);
 		connector = new EntityStorageAuthorizationConnector();
 	});
 
 	afterEach(async () => {
-		await policyStorage.teardown();
-		await roleStorage.teardown();
-		await inheritanceStorage.teardown();
-		await roleNameStorage.teardown();
+		await teardownTestStorages(storages);
 	});
 
 	test("can create an instance", () => {
@@ -100,10 +59,11 @@ describe("EntityStorageAuthorizationConnector", () => {
 
 		test("filters by subject when subject is provided", async () => {
 			await connector.addPolicy(TEST_MODEL_ID, "alice", "document", "read");
-			await connector.addPolicy(TEST_MODEL_ID, "bob", "report", "read");
+			await connector.addPolicy(TEST_MODEL_ID, "alice", "report", "write");
+			await connector.addPolicy(TEST_MODEL_ID, "bob", "document", "read");
 			const { entities } = await connector.getAllPolicies(TEST_MODEL_ID, "alice");
-			expect(entities).toHaveLength(1);
-			expect(entities[0].subject).toBe("alice");
+			expect(entities).toHaveLength(2);
+			expect(entities.every(p => p.subject === "alice")).toBe(true);
 		});
 
 		test("returns cursor when limit is reached", async () => {
@@ -324,8 +284,8 @@ describe("EntityStorageAuthorizationConnector", () => {
 		});
 
 		test("ignores role policies from a different model", async () => {
-			await connector.addPolicy("other-model", "admin", "report", "delete");
-			await connector.addPolicy("other-model", "viewer", "document", "read");
+			await connector.addPolicy(TEST_OTHER_MODEL_ID, "admin", "report", "delete");
+			await connector.addPolicy(TEST_OTHER_MODEL_ID, "viewer", "document", "read");
 			await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "admin");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
@@ -634,7 +594,7 @@ describe("EntityStorageAuthorizationConnector", () => {
 
 		test("throws when inheritsFrom contains the | separator for addRoleInheritance", async () => {
 			await expect(
-				connector.addRoleInheritance(TEST_MODEL_ID, "editor", "view|er")
+				connector.addRoleInheritance(TEST_MODEL_ID, "editor", "vie|wer")
 			).rejects.toThrow();
 		});
 
@@ -815,57 +775,198 @@ describe("EntityStorageAuthorizationConnector", () => {
 		});
 	});
 
+	describe("role assignments and inheritances are separate", () => {
+		test("an inheritance is not reported as an assignment", async () => {
+			await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
+			await expect(connector.getRolesForSubject(TEST_MODEL_ID, "editor")).resolves.toEqual([]);
+			await expect(connector.getSubjectsForRole(TEST_MODEL_ID, "viewer")).resolves.toEqual([]);
+			await expect(connector.hasRoleForSubject(TEST_MODEL_ID, "editor", "viewer")).resolves.toBe(
+				false
+			);
+			await expect(connector.getParentRoles(TEST_MODEL_ID, "editor")).resolves.toEqual(["viewer"]);
+		});
+
+		test("an assignment is not reported as an inheritance", async () => {
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
+			await expect(connector.getParentRoles(TEST_MODEL_ID, "alice")).resolves.toEqual([]);
+			await expect(connector.getChildRoles(TEST_MODEL_ID, "editor")).resolves.toEqual([]);
+			await expect(connector.getRolesForSubject(TEST_MODEL_ID, "alice")).resolves.toEqual([
+				"editor"
+			]);
+		});
+
+		test("removing an assignment does not remove a matching inheritance and vice versa", async () => {
+			await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
+
+			await connector.removeRoleForSubject(TEST_MODEL_ID, "editor", "viewer");
+			await expect(connector.getParentRoles(TEST_MODEL_ID, "editor")).resolves.toEqual(["viewer"]);
+
+			await connector.removeRoleInheritance(TEST_MODEL_ID, "alice", "editor");
+			await expect(connector.getRolesForSubject(TEST_MODEL_ID, "alice")).resolves.toEqual([
+				"editor"
+			]);
+		});
+
+		test("removeAllRolesForSubject leaves inheritances of a role with the same name", async () => {
+			await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
+			await connector.addRoleForSubject(TEST_MODEL_ID, "editor", "alice");
+			await connector.removeAllRolesForSubject(TEST_MODEL_ID, "editor");
+			await expect(connector.getRolesForSubject(TEST_MODEL_ID, "editor")).resolves.toEqual([]);
+			await expect(connector.getParentRoles(TEST_MODEL_ID, "editor")).resolves.toEqual(["viewer"]);
+		});
+
+		test("check does not follow inheritance from the subject or assignments beyond the first level", async () => {
+			await connector.addPolicy(TEST_MODEL_ID, "viewer", "document", "read");
+			await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
+			await expect(connector.check(TEST_MODEL_ID, "editor", "document", "read")).resolves.toBe(
+				false
+			);
+
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "a");
+			await connector.addRoleForSubject(TEST_MODEL_ID, "a", "viewer");
+			await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(
+				false
+			);
+		});
+	});
+
+	describe("paging beyond the default page size", () => {
+		const COUNT = 45;
+		const names = (prefix: string): string[] =>
+			Array.from({ length: COUNT }, (v, i) => `${prefix}-${i.toString().padStart(3, "0")}`);
+
+		test("removeAllRolesForSubject removes every page of roles", async () => {
+			for (const role of names("role")) {
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", role);
+				await connector.addPolicy(TEST_MODEL_ID, role, "document", "read");
+			}
+			await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(true);
+
+			await connector.removeAllRolesForSubject(TEST_MODEL_ID, "alice");
+
+			await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(
+				false
+			);
+			await expect(connector.getRolesForSubject(TEST_MODEL_ID, "alice")).resolves.toEqual([]);
+			await expect(connector.getAllRoles(TEST_MODEL_ID)).resolves.toEqual({ roles: [] });
+		});
+
+		test("getRolesForSubject returns every page", async () => {
+			for (const role of names("role")) {
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", role);
+			}
+			const roles = await connector.getRolesForSubject(TEST_MODEL_ID, "alice");
+			expect(roles.sort()).toEqual(names("role"));
+		});
+
+		test("getSubjectsForRole returns every page", async () => {
+			for (const subject of names("user")) {
+				await connector.addRoleForSubject(TEST_MODEL_ID, subject, "admin");
+			}
+			const subjects = await connector.getSubjectsForRole(TEST_MODEL_ID, "admin");
+			expect(subjects.sort()).toEqual(names("user"));
+		});
+
+		test("getParentRoles returns every page", async () => {
+			for (const parent of names("parent")) {
+				await connector.addRoleInheritance(TEST_MODEL_ID, "child", parent);
+			}
+			const parents = await connector.getParentRoles(TEST_MODEL_ID, "child");
+			expect(parents.sort()).toEqual(names("parent"));
+		});
+
+		test("getChildRoles returns every page", async () => {
+			for (const child of names("child")) {
+				await connector.addRoleInheritance(TEST_MODEL_ID, child, "parent");
+			}
+			const children = await connector.getChildRoles(TEST_MODEL_ID, "parent");
+			expect(children.sort()).toEqual(names("child"));
+		});
+
+		test("check finds a grant beyond the default page of inheritance rows", async () => {
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "base");
+			for (const parent of names("parent")) {
+				await connector.addRoleInheritance(TEST_MODEL_ID, "base", parent);
+			}
+			await connector.addPolicy(TEST_MODEL_ID, "parent-044", "document", "read");
+
+			await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(true);
+			await expect(connector.check(TEST_MODEL_ID, "alice", "document", "write")).resolves.toBe(
+				false
+			);
+		});
+
+		test("check resolves a large inheritance frontier spanning many pages", async () => {
+			const mids = Array.from({ length: 510 }, (v, i) => `mid-${i.toString().padStart(3, "0")}`);
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "base");
+			for (const mid of mids) {
+				await connector.addRoleInheritance(TEST_MODEL_ID, "base", mid);
+			}
+			await connector.addRoleInheritance(TEST_MODEL_ID, "mid-509", "top");
+			await connector.addPolicy(TEST_MODEL_ID, "top", "document", "read");
+
+			await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(true);
+			await expect(connector.check(TEST_MODEL_ID, "alice", "document", "write")).resolves.toBe(
+				false
+			);
+		});
+
+		test("hasRoles keeps input order with mixed existing and missing roles", async () => {
+			for (const role of names("role")) {
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", role);
+			}
+			await expect(
+				connector.hasRoles(TEST_MODEL_ID, [
+					"role-044",
+					"missing-a",
+					"role-000",
+					"missing-b",
+					"role-044"
+				])
+			).resolves.toEqual([true, false, true, false, true]);
+		});
+	});
+
+	describe("model isolation", () => {
+		test("an inheritance edge in another model does not grant access", async () => {
+			await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
+			await connector.addRoleInheritance(TEST_OTHER_MODEL_ID, "editor", "admin");
+			await connector.addPolicy(TEST_OTHER_MODEL_ID, "admin", "document", "read");
+
+			await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(
+				false
+			);
+			await expect(connector.check(TEST_OTHER_MODEL_ID, "alice", "document", "read")).resolves.toBe(
+				false
+			);
+
+			await connector.addRoleForSubject(TEST_OTHER_MODEL_ID, "alice", "editor");
+			await expect(connector.check(TEST_OTHER_MODEL_ID, "alice", "document", "read")).resolves.toBe(
+				true
+			);
+		});
+	});
+
+	describe("separator validation", () => {
+		test("a|b subject and b|c object do not collide with a subject and a b|c compound object", async () => {
+			await connector.addPolicy(TEST_MODEL_ID, "alice", "document", "read");
+			await expect(connector.addPolicy(TEST_MODEL_ID, "a|b", "c", "execute")).rejects.toThrow();
+			await expect(connector.check(TEST_MODEL_ID, "a", "b|c", "execute")).rejects.toThrow();
+		});
+
+		test("rejects a model id containing the | separator", async () => {
+			await expect(connector.getAllRoles("a|b")).rejects.toThrow();
+			await expect(connector.addPolicy("a|b", "alice", "document", "read")).rejects.toThrow();
+		});
+	});
+
 	describe("multi-tenant isolation", () => {
-		let tenantPolicyStorage: MemoryEntityStorageConnector<AuthorizationPolicy>;
-		let tenantRoleStorage: MemoryEntityStorageConnector<AuthorizationRoleAssignment>;
-		let tenantInheritanceStorage: MemoryEntityStorageConnector<AuthorizationRoleInheritance>;
-		let tenantRoleNameStorage: MemoryEntityStorageConnector<AuthorizationRoleName>;
+		let tenantStorages: IEntityStorageConnector[];
 		let tenantConnector: EntityStorageAuthorizationConnector;
 
 		beforeEach(async () => {
-			tenantPolicyStorage = new MemoryEntityStorageConnector<AuthorizationPolicy>({
-				entitySchema: nameof<AuthorizationPolicy>(),
-				partitionContextIds: [ContextIdKeys.Tenant],
-				config: { storageKey: "tenant-authorization-policy" }
-			});
-			await tenantPolicyStorage.teardown();
-			EntityStorageConnectorFactory.register(
-				"tenant-authorization-policy",
-				() => tenantPolicyStorage
-			);
-
-			tenantRoleStorage = new MemoryEntityStorageConnector<AuthorizationRoleAssignment>({
-				entitySchema: nameof<AuthorizationRoleAssignment>(),
-				partitionContextIds: [ContextIdKeys.Tenant],
-				config: { storageKey: "tenant-authorization-role-assignment" }
-			});
-			await tenantRoleStorage.teardown();
-			EntityStorageConnectorFactory.register(
-				"tenant-authorization-role-assignment",
-				() => tenantRoleStorage
-			);
-
-			tenantInheritanceStorage = new MemoryEntityStorageConnector<AuthorizationRoleInheritance>({
-				entitySchema: nameof<AuthorizationRoleInheritance>(),
-				partitionContextIds: [ContextIdKeys.Tenant],
-				config: { storageKey: "tenant-authorization-role-inheritance" }
-			});
-			await tenantInheritanceStorage.teardown();
-			EntityStorageConnectorFactory.register(
-				"tenant-authorization-role-inheritance",
-				() => tenantInheritanceStorage
-			);
-
-			tenantRoleNameStorage = new MemoryEntityStorageConnector<AuthorizationRoleName>({
-				entitySchema: nameof<AuthorizationRoleName>(),
-				partitionContextIds: [ContextIdKeys.Tenant],
-				config: { storageKey: "tenant-authorization-role-name" }
-			});
-			await tenantRoleNameStorage.teardown();
-			EntityStorageConnectorFactory.register(
-				"tenant-authorization-role-name",
-				() => tenantRoleNameStorage
-			);
+			tenantStorages = await createTestStorages(backend, "tenant-", [ContextIdKeys.Tenant]);
 
 			tenantConnector = new EntityStorageAuthorizationConnector({
 				authorizationPolicyEntityStorageType: "tenant-authorization-policy",
@@ -876,10 +977,7 @@ describe("EntityStorageAuthorizationConnector", () => {
 		});
 
 		afterEach(async () => {
-			await tenantPolicyStorage.teardown();
-			await tenantRoleStorage.teardown();
-			await tenantInheritanceStorage.teardown();
-			await tenantRoleNameStorage.teardown();
+			await teardownTestStorages(tenantStorages);
 		});
 
 		test("policies added under one tenant are not visible to another", async () => {
@@ -1015,11 +1113,17 @@ describe("EntityStorageAuthorizationConnector", () => {
 				await tenantConnector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
 			});
 
-			const deniedInB = await ContextIdStore.run(
-				{ [ContextIdKeys.Tenant]: TEST_TENANT_ID_B },
-				async () => tenantConnector.check(TEST_MODEL_ID, "alice", "/page", "read")
-			);
-			expect(deniedInB).toBe(false);
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				await expect(tenantConnector.check(TEST_MODEL_ID, "alice", "/page", "read")).resolves.toBe(
+					true
+				);
+			});
+
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_B }, async () => {
+				await expect(tenantConnector.check(TEST_MODEL_ID, "alice", "/page", "read")).resolves.toBe(
+					false
+				);
+			});
 		});
 	});
 });

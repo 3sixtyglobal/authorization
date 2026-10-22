@@ -8,6 +8,17 @@ This package provides an entity storage-based connector for authorisation decisi
 npm install @3sixty/authorization-connector-entity-storage
 ```
 
+## Docker
+
+The tests run against both the memory and PostgreSQL entity storage connectors, so they require a running PostgreSQL instance. This is the same instance used by the `@3sixty/entity-storage-connector-postgresql` tests:
+
+```shell
+docker pull postgres:latest
+docker run -d --name 3sixty-entity-storage-postgresql -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=password -p 5432:5432 postgres:latest
+```
+
+The connection settings are read from `tests/.env` and can be overridden locally in `tests/.env.dev`.
+
 ## Examples
 
 Usage of the APIs is shown in [docs/examples.md](docs/examples.md)

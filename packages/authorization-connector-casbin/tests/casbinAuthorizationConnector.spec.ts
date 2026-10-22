@@ -15,25 +15,37 @@ import { CasbinAuthorizationConnector } from "../src/casbinAuthorizationConnecto
 const TEST_TENANT_ID_A = "test-tenant-a";
 const TEST_TENANT_ID_B = "test-tenant-b";
 const TEST_MODEL_ID = "test-model";
+const TEST_OTHER_MODEL_ID = "other-model";
 
 describe("CasbinAuthorizationConnector", () => {
 	let connector: CasbinAuthorizationConnector;
 
-	async function cleanup(): Promise<void> {
-		await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
-			const { entities: policies } = await connector.getAllPolicies(TEST_MODEL_ID);
+	async function clearModel(modelId: string): Promise<void> {
+		let { entities: policies } = await connector.getAllPolicies(modelId);
+		while (policies.length > 0) {
 			for (const policy of policies) {
-				await connector.removePolicy(TEST_MODEL_ID, policy.subject, policy.object, policy.action);
+				await connector.removePolicy(modelId, policy.subject, policy.object, policy.action);
 			}
-			for (const subject of ["alice", "bob", "carol", "a", "b", "superuser"]) {
-				await connector.removeAllRolesForSubject(TEST_MODEL_ID, subject);
-			}
-			for (const role of ["admin", "editor", "viewer", "superuser", "superAdmin", "a", "b"]) {
-				const parents = await connector.getParentRoles(TEST_MODEL_ID, role);
-				for (const parent of parents) {
-					await connector.removeRoleInheritance(TEST_MODEL_ID, role, parent);
+			({ entities: policies } = await connector.getAllPolicies(modelId));
+		}
+		let { roles } = await connector.getAllRoles(modelId);
+		while (roles.length > 0) {
+			for (const role of roles) {
+				for (const subject of await connector.getSubjectsForRole(modelId, role)) {
+					await connector.removeRoleForSubject(modelId, subject, role);
+				}
+				for (const child of await connector.getChildRoles(modelId, role)) {
+					await connector.removeRoleInheritance(modelId, child, role);
 				}
 			}
+			({ roles } = await connector.getAllRoles(modelId));
+		}
+	}
+
+	async function cleanup(): Promise<void> {
+		await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+			await clearModel(TEST_MODEL_ID);
+			await clearModel(TEST_OTHER_MODEL_ID);
 		});
 	}
 
@@ -347,6 +359,74 @@ describe("CasbinAuthorizationConnector", () => {
 				await connector.addRoleInheritance(TEST_MODEL_ID, "b", "a");
 				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "a");
 				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(
+					false
+				);
+			});
+		});
+
+		test("returns true when only one of several assigned roles has a matching policy", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				await connector.addPolicy(TEST_MODEL_ID, "auditor", "report", "read");
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "auditor");
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "viewer");
+				await expect(connector.check(TEST_MODEL_ID, "alice", "report", "read")).resolves.toBe(true);
+			});
+		});
+
+		test("returns true via a role reached through a cycle", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				await connector.addPolicy(TEST_MODEL_ID, "c", "document", "read");
+				await connector.addRoleInheritance(TEST_MODEL_ID, "a", "b");
+				await connector.addRoleInheritance(TEST_MODEL_ID, "b", "a");
+				await connector.addRoleInheritance(TEST_MODEL_ID, "b", "c");
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "a");
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(
+					true
+				);
+			});
+		});
+
+		test("returns true via a diamond role inheritance", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				await connector.addPolicy(TEST_MODEL_ID, "base", "document", "read");
+				await connector.addRoleInheritance(TEST_MODEL_ID, "top", "left");
+				await connector.addRoleInheritance(TEST_MODEL_ID, "top", "right");
+				await connector.addRoleInheritance(TEST_MODEL_ID, "left", "base");
+				await connector.addRoleInheritance(TEST_MODEL_ID, "right", "base");
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "top");
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(
+					true
+				);
+			});
+		});
+
+		test("ignores role policies from a different model", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				await connector.addPolicy(TEST_OTHER_MODEL_ID, "admin", "report", "delete");
+				await connector.addPolicy(TEST_OTHER_MODEL_ID, "viewer", "document", "read");
+				await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "admin");
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
+				await expect(connector.check(TEST_MODEL_ID, "alice", "report", "delete")).resolves.toBe(
+					false
+				);
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(
+					false
+				);
+			});
+		});
+
+		test("returns true when the granting role is beyond the first page of roles", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				for (let i = 0; i < 120; i++) {
+					await connector.addRoleForSubject(TEST_MODEL_ID, "alice", `role-${i}`);
+				}
+				await connector.addPolicy(TEST_MODEL_ID, "role-99", "document", "read");
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(
+					true
+				);
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "write")).resolves.toBe(
 					false
 				);
 			});
@@ -951,23 +1031,241 @@ describe("CasbinAuthorizationConnector", () => {
 		});
 	});
 
+	describe("role assignments and inheritances are separate", () => {
+		test("an inheritance is not reported as an assignment", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
+				await expect(connector.getRolesForSubject(TEST_MODEL_ID, "editor")).resolves.toEqual([]);
+				await expect(connector.getSubjectsForRole(TEST_MODEL_ID, "viewer")).resolves.toEqual([]);
+				await expect(connector.hasRoleForSubject(TEST_MODEL_ID, "editor", "viewer")).resolves.toBe(
+					false
+				);
+				await expect(connector.getParentRoles(TEST_MODEL_ID, "editor")).resolves.toEqual([
+					"viewer"
+				]);
+			});
+		});
+
+		test("an assignment is not reported as an inheritance", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
+				await expect(connector.getParentRoles(TEST_MODEL_ID, "alice")).resolves.toEqual([]);
+				await expect(connector.getChildRoles(TEST_MODEL_ID, "editor")).resolves.toEqual([]);
+				await expect(connector.getRolesForSubject(TEST_MODEL_ID, "alice")).resolves.toEqual([
+					"editor"
+				]);
+			});
+		});
+
+		test("removing an assignment does not remove a matching inheritance and vice versa", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
+
+				await connector.removeRoleForSubject(TEST_MODEL_ID, "editor", "viewer");
+				await expect(connector.getParentRoles(TEST_MODEL_ID, "editor")).resolves.toEqual([
+					"viewer"
+				]);
+
+				await connector.removeRoleInheritance(TEST_MODEL_ID, "alice", "editor");
+				await expect(connector.getRolesForSubject(TEST_MODEL_ID, "alice")).resolves.toEqual([
+					"editor"
+				]);
+			});
+		});
+
+		test("removeAllRolesForSubject leaves inheritances of a role with the same name", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
+				await connector.addRoleForSubject(TEST_MODEL_ID, "editor", "alice");
+				await connector.removeAllRolesForSubject(TEST_MODEL_ID, "editor");
+				await expect(connector.getRolesForSubject(TEST_MODEL_ID, "editor")).resolves.toEqual([]);
+				await expect(connector.getParentRoles(TEST_MODEL_ID, "editor")).resolves.toEqual([
+					"viewer"
+				]);
+			});
+		});
+
+		test("check does not follow inheritance from the subject or assignments beyond the first level", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				await connector.addPolicy(TEST_MODEL_ID, "viewer", "document", "read");
+				await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
+				await expect(connector.check(TEST_MODEL_ID, "editor", "document", "read")).resolves.toBe(
+					false
+				);
+
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "a");
+				await connector.addRoleForSubject(TEST_MODEL_ID, "a", "viewer");
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(
+					false
+				);
+			});
+		});
+	});
+
+	describe("paging beyond the default page size", () => {
+		const COUNT = 45;
+		const names = (prefix: string): string[] =>
+			Array.from({ length: COUNT }, (v, i) => `${prefix}-${i.toString().padStart(3, "0")}`);
+
+		test("removeAllRolesForSubject removes every page of roles", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				for (const role of names("role")) {
+					await connector.addRoleForSubject(TEST_MODEL_ID, "alice", role);
+					await connector.addPolicy(TEST_MODEL_ID, role, "document", "read");
+				}
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(
+					true
+				);
+
+				await connector.removeAllRolesForSubject(TEST_MODEL_ID, "alice");
+
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(
+					false
+				);
+				await expect(connector.getRolesForSubject(TEST_MODEL_ID, "alice")).resolves.toEqual([]);
+				await expect(connector.getAllRoles(TEST_MODEL_ID)).resolves.toEqual({ roles: [] });
+			});
+		});
+
+		test("getRolesForSubject returns every page", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				for (const role of names("role")) {
+					await connector.addRoleForSubject(TEST_MODEL_ID, "alice", role);
+				}
+				const roles = await connector.getRolesForSubject(TEST_MODEL_ID, "alice");
+				expect(roles.sort()).toEqual(names("role"));
+			});
+		});
+
+		test("getSubjectsForRole returns every page", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				for (const subject of names("user")) {
+					await connector.addRoleForSubject(TEST_MODEL_ID, subject, "admin");
+				}
+				const subjects = await connector.getSubjectsForRole(TEST_MODEL_ID, "admin");
+				expect(subjects.sort()).toEqual(names("user"));
+			});
+		});
+
+		test("getParentRoles returns every page", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				for (const parent of names("parent")) {
+					await connector.addRoleInheritance(TEST_MODEL_ID, "child", parent);
+				}
+				const parents = await connector.getParentRoles(TEST_MODEL_ID, "child");
+				expect(parents.sort()).toEqual(names("parent"));
+			});
+		});
+
+		test("getChildRoles returns every page", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				for (const child of names("child")) {
+					await connector.addRoleInheritance(TEST_MODEL_ID, child, "parent");
+				}
+				const children = await connector.getChildRoles(TEST_MODEL_ID, "parent");
+				expect(children.sort()).toEqual(names("child"));
+			});
+		});
+
+		test("check finds a grant beyond the default page of inheritance rows", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "base");
+				for (const parent of names("parent")) {
+					await connector.addRoleInheritance(TEST_MODEL_ID, "base", parent);
+				}
+				await connector.addPolicy(TEST_MODEL_ID, "parent-044", "document", "read");
+
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(
+					true
+				);
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "write")).resolves.toBe(
+					false
+				);
+			});
+		});
+
+		test("check resolves a large inheritance frontier spanning many pages", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				const mids = Array.from({ length: 510 }, (v, i) => `mid-${i.toString().padStart(3, "0")}`);
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "base");
+				for (const mid of mids) {
+					await connector.addRoleInheritance(TEST_MODEL_ID, "base", mid);
+				}
+				await connector.addRoleInheritance(TEST_MODEL_ID, "mid-509", "top");
+				await connector.addPolicy(TEST_MODEL_ID, "top", "document", "read");
+
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(
+					true
+				);
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "write")).resolves.toBe(
+					false
+				);
+			});
+		});
+
+		test("hasRoles keeps input order with mixed existing and missing roles", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				for (const role of names("role")) {
+					await connector.addRoleForSubject(TEST_MODEL_ID, "alice", role);
+				}
+				await expect(
+					connector.hasRoles(TEST_MODEL_ID, [
+						"role-044",
+						"missing-a",
+						"role-000",
+						"missing-b",
+						"role-044"
+					])
+				).resolves.toEqual([true, false, true, false, true]);
+			});
+		});
+	});
+
+	describe("model isolation", () => {
+		test("an inheritance edge in another model does not grant access", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
+				await connector.addRoleInheritance(TEST_OTHER_MODEL_ID, "editor", "admin");
+				await connector.addPolicy(TEST_OTHER_MODEL_ID, "admin", "document", "read");
+
+				await expect(connector.check(TEST_MODEL_ID, "alice", "document", "read")).resolves.toBe(
+					false
+				);
+				await expect(
+					connector.check(TEST_OTHER_MODEL_ID, "alice", "document", "read")
+				).resolves.toBe(false);
+
+				await connector.addRoleForSubject(TEST_OTHER_MODEL_ID, "alice", "editor");
+				await expect(
+					connector.check(TEST_OTHER_MODEL_ID, "alice", "document", "read")
+				).resolves.toBe(true);
+			});
+		});
+	});
+
+	describe("separator validation", () => {
+		test("a|b subject and b|c object do not collide with a subject and a b|c compound object", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				await connector.addPolicy(TEST_MODEL_ID, "alice", "document", "read");
+				await expect(connector.addPolicy(TEST_MODEL_ID, "a|b", "c", "execute")).rejects.toThrow();
+				await expect(connector.check(TEST_MODEL_ID, "a", "b|c", "execute")).rejects.toThrow();
+			});
+		});
+
+		test("rejects a model id containing the | separator", async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				await expect(connector.getAllRoles("a|b")).rejects.toThrow();
+				await expect(connector.addPolicy("a|b", "alice", "document", "read")).rejects.toThrow();
+			});
+		});
+	});
+
 	describe("multi-tenant isolation", () => {
 		async function cleanupTenant(tenantId: string): Promise<void> {
-			await ContextIdStore.run({ [ContextIdKeys.Tenant]: tenantId }, async () => {
-				const { entities: policies } = await connector.getAllPolicies(TEST_MODEL_ID);
-				for (const policy of policies) {
-					await connector.removePolicy(TEST_MODEL_ID, policy.subject, policy.object, policy.action);
-				}
-				for (const subject of ["alice", "bob"]) {
-					await connector.removeAllRolesForSubject(TEST_MODEL_ID, subject);
-				}
-				for (const role of ["admin", "editor", "viewer"]) {
-					const parents = await connector.getParentRoles(TEST_MODEL_ID, role);
-					for (const parent of parents) {
-						await connector.removeRoleInheritance(TEST_MODEL_ID, role, parent);
-					}
-				}
-			});
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: tenantId }, async () =>
+				clearModel(TEST_MODEL_ID)
+			);
 		}
 
 		beforeEach(async () => {
@@ -1111,6 +1409,10 @@ describe("CasbinAuthorizationConnector", () => {
 				await connector.addPolicy(TEST_MODEL_ID, "viewer", "/page", "read");
 				await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
 				await connector.addRoleForSubject(TEST_MODEL_ID, "alice", "editor");
+			});
+
+			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_A }, async () => {
+				await expect(connector.check(TEST_MODEL_ID, "alice", "/page", "read")).resolves.toBe(true);
 			});
 
 			await ContextIdStore.run({ [ContextIdKeys.Tenant]: TEST_TENANT_ID_B }, async () => {

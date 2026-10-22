@@ -32,7 +32,7 @@
 			"getParentRolesFailed": "The retrieval of parent roles failed",
 			"getChildRolesFailed": "The retrieval of child roles failed",
 			"buildFailed": "The build of the authorization model failed",
-			"containsSeparator": "The field \"{fieldName}\" must not contain the \"|\" separator character.",
+			"containsSeparator": "The field \"{property}\" must not contain the \"|\" separator character.",
 			"escalationDenied": "This operation is not permitted as it would result in privilege escalation.",
 			"systemModelBuildDenied": "The system model can only be built by a system process."
 		},

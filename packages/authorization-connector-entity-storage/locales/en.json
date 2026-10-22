@@ -19,7 +19,8 @@
 			"getParentRolesFailed": "Failed to retrieve parent roles for role \"{role}\".",
 			"getChildRolesFailed": "Failed to retrieve child roles for role \"{role}\".",
 			"buildFailed": "Failed to build the authorization model.",
-			"containsSeparator": "The value for \"{fieldName}\" must not contain the \"|\" separator character."
+			"containsSeparator": "The value for \"{fieldName}\" must not contain the \"|\" separator character.",
+			"idTooLong": "The compound identifier of length {length} exceeds the maximum length of {maxLength}."
 		}
 	}
 }

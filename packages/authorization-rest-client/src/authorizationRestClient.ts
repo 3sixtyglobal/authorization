@@ -72,8 +72,9 @@ export class AuthorizationRestClient extends BaseRestClient implements IAuthoriz
 	 */
 	public async build(modelId: string, model: IAuthorizationModel): Promise<void> {
 		Guards.stringValue(AuthorizationRestClient.CLASS_NAME, nameof(modelId), modelId);
+		Guards.object<IAuthorizationModel>(AuthorizationRestClient.CLASS_NAME, nameof(model), model);
 
-		await this.fetch<IAuthorizationBuildRequest, never>("/:modelId", HttpMethod.POST, {
+		await this.fetch<IAuthorizationBuildRequest, INoContentResponse>("/:modelId", HttpMethod.POST, {
 			pathParams: { modelId },
 			body: model
 		});

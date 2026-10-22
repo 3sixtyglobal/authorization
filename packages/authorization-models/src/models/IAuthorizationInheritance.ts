@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0.
 
 /**
- * Defines multiple authorization rules.
+ * Defines a single role inheritance relationship.
  */
 export interface IAuthorizationInheritance {
 	/**

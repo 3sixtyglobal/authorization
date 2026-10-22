@@ -1,7 +1,8 @@
 // Copyright 2026 IOTA Stiftung.
 // SPDX-License-Identifier: Apache-2.0.
+import type { IAuthorizationModel } from "@3sixty/authorization-models";
 import { GuardError } from "@3sixty/core";
-import { HttpMethod } from "@3sixty/web";
+import { HeaderTypes, HttpMethod, HttpStatusCode, MimeTypes } from "@3sixty/web";
 import { AuthorizationRestClient } from "../src/authorizationRestClient.js";
 import {
 	jsonResponse,
@@ -39,7 +40,78 @@ describe("AuthorizationRestClient", () => {
 		expect(client.className()).toBe("AuthorizationRestClient");
 	});
 
+	test("rejects when the response is not successful", async () => {
+		fetchMock.mockResolvedValueOnce({
+			ok: false,
+			status: HttpStatusCode.internalServerError,
+			statusText: "Internal Server Error",
+			headers: new Headers({ [HeaderTypes.ContentType]: MimeTypes.Json }),
+			json: async () => ({})
+		});
+
+		await expect(client.check(MODEL_ID, SUBJECT, OBJECT, ACTION)).rejects.toMatchObject({
+			message: "baseRestClient.failureStatusText"
+		});
+	});
+
+	describe("build", () => {
+		const model: IAuthorizationModel = {
+			policies: [{ subject: SUBJECT, object: OBJECT, action: ACTION }],
+			roleInheritances: [{ role: ROLE, inheritsFrom: PARENT_ROLE }]
+		};
+
+		test("throws when modelId is empty", async () => {
+			await expect(client.build("", model)).rejects.toMatchObject({
+				name: GuardError.CLASS_NAME,
+				message: "guard.stringEmpty"
+			});
+		});
+
+		test("throws when model is missing", async () => {
+			await expect(
+				client.build(MODEL_ID, undefined as unknown as IAuthorizationModel)
+			).rejects.toMatchObject({
+				name: GuardError.CLASS_NAME,
+				message: "guard.objectUndefined"
+			});
+		});
+
+		test("sends POST to /{prefix}/{modelId}", async () => {
+			fetchMock.mockResolvedValueOnce(noContentResponse());
+
+			await client.build(MODEL_ID, model);
+
+			const [url, options] = fetchMock.mock.calls[0];
+			expect(url).toBe(`${ENDPOINT}/${PREFIX}/${MODEL_ID}`);
+			expect(options.method).toBe(HttpMethod.POST);
+		});
+
+		test("sends the model as the request body", async () => {
+			fetchMock.mockResolvedValueOnce(noContentResponse());
+
+			await client.build(MODEL_ID, model);
+
+			const [, options] = fetchMock.mock.calls[0];
+			expect(JSON.parse(options.body)).toEqual(model);
+		});
+
+		test("resolves without a return value", async () => {
+			fetchMock.mockResolvedValueOnce(noContentResponse());
+
+			const result = await client.build(MODEL_ID, model);
+
+			expect(result).toBeUndefined();
+		});
+	});
+
 	describe("check", () => {
+		test("throws when modelId is empty", async () => {
+			await expect(client.check("", SUBJECT, OBJECT, ACTION)).rejects.toMatchObject({
+				name: GuardError.CLASS_NAME,
+				message: "guard.stringEmpty"
+			});
+		});
+
 		test("throws when subject is empty", async () => {
 			await expect(client.check(MODEL_ID, "", OBJECT, ACTION)).rejects.toMatchObject({
 				name: GuardError.CLASS_NAME,
@@ -222,6 +294,26 @@ describe("AuthorizationRestClient", () => {
 			expect(url).toContain("cursor=5");
 			expect(url).toContain("limit=10");
 		});
+
+		test("passes only subject when cursor and limit are omitted", async () => {
+			fetchMock.mockResolvedValueOnce(jsonResponse({ entities: [] }));
+
+			await client.getAllPolicies(MODEL_ID, "alice");
+
+			const [url] = fetchMock.mock.calls[0];
+			expect(url).toBe(`${ENDPOINT}/${PREFIX}/${MODEL_ID}/policy?subject=alice`);
+		});
+
+		test("encodes query values that need encoding", async () => {
+			fetchMock.mockResolvedValueOnce(jsonResponse({ entities: [] }));
+
+			await client.getAllPolicies(MODEL_ID, "a/b c%d", "x&y=z");
+
+			const [url] = fetchMock.mock.calls[0];
+			expect(url).toBe(
+				`${ENDPOINT}/${PREFIX}/${MODEL_ID}/policy?subject=a%2Fb%20c%25d&cursor=x%26y%3Dz`
+			);
+		});
 	});
 
 	describe("getAllRoles", () => {
@@ -290,6 +382,24 @@ describe("AuthorizationRestClient", () => {
 			const result = await client.getPoliciesForSubject(MODEL_ID, SUBJECT);
 
 			expect(result).toEqual({ entities: [{ subject: SUBJECT, object: OBJECT, action: ACTION }] });
+		});
+
+		test("passes cursor and limit as query params", async () => {
+			fetchMock.mockResolvedValueOnce(jsonResponse({ entities: [] }));
+
+			await client.getPoliciesForSubject(MODEL_ID, SUBJECT, "5", 10);
+
+			const [url] = fetchMock.mock.calls[0];
+			expect(url).toBe(`${ENDPOINT}/${PREFIX}/${MODEL_ID}/policy/${SUBJECT}?cursor=5&limit=10`);
+		});
+
+		test("encodes the subject path param and cursor query value", async () => {
+			fetchMock.mockResolvedValueOnce(jsonResponse({ entities: [] }));
+
+			await client.getPoliciesForSubject(MODEL_ID, "a/b c%d", "x&y=z");
+
+			const [url] = fetchMock.mock.calls[0];
+			expect(url).toBe(`${ENDPOINT}/${PREFIX}/${MODEL_ID}/policy/a%2Fb%20c%25d?cursor=x%26y%3Dz`);
 		});
 	});
 

@@ -11,10 +11,13 @@ import {
 	ComponentFactory,
 	Converter,
 	GeneralError,
+	GuardError,
 	Guards,
 	Is,
+	Mutex,
 	StringHelper
 } from "@3sixty/core";
+import { Sha256 } from "@3sixty/crypto";
 import type { ILoggingComponent } from "@3sixty/logging-models";
 import { nameof } from "@3sixty/nameof";
 import { FetchHelper, HttpMethod, type IHttpHeaders } from "@3sixty/web";
@@ -36,6 +39,31 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * Runtime name for the class.
 	 */
 	public static readonly CLASS_NAME: string = nameof<CasbinAuthorizationConnector>();
+
+	/**
+	 * Value stored in V2 of a "g" rule to mark it as a role assignment.
+	 * Casdoor's policy API stores every non "p" rule as "g", so the kind is held in V2 instead of a "g2" type.
+	 * @internal
+	 */
+	private static readonly _ASSIGNMENT_MARKER: string = "assigned";
+
+	/**
+	 * Value stored in V2 of a "g" rule to mark it as a role inheritance.
+	 * @internal
+	 */
+	private static readonly _INHERITANCE_MARKER: string = "inherits";
+
+	/**
+	 * The default page size when no limit is provided.
+	 * @internal
+	 */
+	private static readonly _DEFAULT_PAGE_SIZE: number = 40;
+
+	/**
+	 * The name of the Casdoor model created for each tenant and used by its enforcers.
+	 * @internal
+	 */
+	private static readonly _CASDOOR_MODEL_NAME: string = "authorization";
 
 	/**
 	 * The component for logging.
@@ -171,7 +199,7 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * @returns Nothing.
 	 */
 	public async build(modelId: string, model: IAuthorizationModel): Promise<void> {
-		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardModelId(modelId);
 
 		try {
 			for (const policy of model.policies ?? []) {
@@ -195,7 +223,7 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 
 	/**
 	 * Check whether a subject is permitted to perform an action on an object.
-	 * Evaluates RBAC locally by traversing role inheritance from the stored grouping policies.
+	 * Evaluates RBAC locally, following the subject's role assignments and then role inheritance.
 	 * @param modelId The model identifier selecting which policy set to use.
 	 * @param subject The subject requesting access.
 	 * @param object The object being accessed.
@@ -209,38 +237,54 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		object: string,
 		action: string
 	): Promise<boolean> {
-		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardModelId(modelId);
 		this.guardNoSeparator(nameof(subject), subject);
 		this.guardNoSeparator(nameof(object), object);
 		this.guardNoSeparator(nameof(action), action);
 
 		try {
-			const allRules = await this.getAllRawPolicies(modelId);
-
-			const permissions = allRules.filter(r => r.Ptype === "p");
-			const groupings = allRules.filter(r => r.Ptype === "g");
-
-			const roleGraph = new Map<string, Set<string>>();
-			for (const g of groupings) {
-				if (!roleGraph.has(g.V0)) {
-					roleGraph.set(g.V0, new Set());
-				}
-				roleGraph.get(g.V0)?.add(g.V1);
+			const tenantId = await this.getTenantId();
+			if (!(await this.enforcerExists(tenantId, modelId))) {
+				return false;
 			}
 
-			const reachable = new Set<string>([subject]);
-			const queue: string[] = [subject];
-			while (queue.length > 0) {
-				const current = queue.shift() ?? "";
-				for (const role of roleGraph.get(current) ?? []) {
-					if (!reachable.has(role)) {
-						reachable.add(role);
-						queue.push(role);
+			const [grantRules, subjectRules, inheritanceRules] = await Promise.all([
+				this.getRules(tenantId, modelId, "p", 1, [object, action]),
+				this.getRules(tenantId, modelId, "g", 0, [subject]),
+				this.getRules(tenantId, modelId, "g", 2, [CasbinAuthorizationConnector._INHERITANCE_MARKER])
+			]);
+
+			const grantees = new Set(
+				grantRules.filter(r => r.V1 === object && r.V2 === action).map(r => r.V0)
+			);
+			if (grantees.has(subject)) {
+				return true;
+			}
+
+			const parents = new Map<string, string[]>();
+			for (const r of inheritanceRules.filter(rule => this.isInheritance(rule))) {
+				const list = parents.get(r.V0) ?? [];
+				list.push(r.V1);
+				parents.set(r.V0, list);
+			}
+
+			// First level from assignments only, then follow inheritance upwards.
+			const queue = subjectRules.filter(r => this.isAssignment(r)).map(r => r.V1);
+			const visited = new Set<string>(queue);
+			for (let i = 0; i < queue.length; i++) {
+				const role = queue[i];
+				if (grantees.has(role)) {
+					return true;
+				}
+				for (const parent of parents.get(role) ?? []) {
+					if (!visited.has(parent)) {
+						visited.add(parent);
+						queue.push(parent);
 					}
 				}
 			}
 
-			return permissions.some(p => reachable.has(p.V0) && p.V1 === object && p.V2 === action);
+			return false;
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -269,26 +313,22 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		object: string,
 		action: string
 	): Promise<void> {
-		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardModelId(modelId);
 		this.guardNoSeparator(nameof(subject), subject);
 		this.guardNoSeparator(nameof(object), object);
 		this.guardNoSeparator(nameof(action), action);
 
 		try {
-			await this.ensureEnforcer(modelId);
-			const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
-			const response = await FetchHelper.fetchJson<
-				{ ptype: string; v0: string; v1: string; v2: string },
-				ICasbinServerResponse<string>
-			>(
-				CasbinAuthorizationConnector.CLASS_NAME,
-				`${this._baseUrl}/api/add-policy?id=${encodedEnforcerId}`,
-				HttpMethod.POST,
+			const tenantId = await this.getTenantId();
+			await this.ensureEnforcer(tenantId, modelId);
+			await this.postRule(
+				tenantId,
+				modelId,
+				"add-policy",
 				{ ptype: "p", v0: subject, v1: object, v2: action },
-				this._requestOptions
+				"addPolicyFailed",
+				{ subject }
 			);
-
-			this.assertOk(response, "addPolicyFailed", { subject });
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -317,25 +357,24 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		object: string,
 		action: string
 	): Promise<void> {
-		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardModelId(modelId);
 		this.guardNoSeparator(nameof(subject), subject);
 		this.guardNoSeparator(nameof(object), object);
 		this.guardNoSeparator(nameof(action), action);
 
 		try {
-			const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
-			const response = await FetchHelper.fetchJson<
-				{ ptype: string; v0: string; v1: string; v2: string },
-				ICasbinServerResponse<string>
-			>(
-				CasbinAuthorizationConnector.CLASS_NAME,
-				`${this._baseUrl}/api/remove-policy?id=${encodedEnforcerId}`,
-				HttpMethod.POST,
+			const tenantId = await this.getTenantId();
+			if (!(await this.enforcerExists(tenantId, modelId))) {
+				return;
+			}
+			await this.postRule(
+				tenantId,
+				modelId,
+				"remove-policy",
 				{ ptype: "p", v0: subject, v1: object, v2: action },
-				this._requestOptions
+				"removePolicyFailed",
+				{ subject }
 			);
-
-			this.assertOk(response, "removePolicyFailed", { subject });
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -364,7 +403,7 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		cursor?: string,
 		limit?: number
 	): Promise<{ entities: IAuthorizationPolicy[]; cursor?: string }> {
-		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardModelId(modelId);
 		this.guardNoSeparator(nameof(subject), subject);
 
 		return this.getAllPolicies(modelId, subject, cursor, limit);
@@ -385,33 +424,35 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		cursor?: string,
 		limit?: number
 	): Promise<{ entities: IAuthorizationPolicy[]; cursor?: string }> {
-		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardModelId(modelId);
 		if (subject !== undefined) {
 			this.guardNoSeparator(nameof(subject), subject);
 		}
+		this.guardPaging(cursor, limit);
 
 		try {
-			const rules = await this.getAllRawPolicies(modelId);
-			let policies = rules
-				.filter(r => r.Ptype === "p")
-				.map(r => ({ subject: r.V0, object: r.V1, action: r.V2 }));
-
-			if (subject !== undefined) {
-				policies = policies.filter(p => p.subject === subject);
+			const tenantId = await this.getTenantId();
+			if (!(await this.enforcerExists(tenantId, modelId))) {
+				return { entities: [] };
 			}
 
-			if (limit === undefined) {
-				return { entities: policies };
-			}
+			const rules =
+				subject === undefined
+					? await this.getRules(tenantId, modelId)
+					: await this.getRules(tenantId, modelId, "p", 0, [subject]);
 
-			const offset = cursor !== undefined ? parseInt(cursor, 10) : 0;
-			const pagePolicies = policies.slice(offset, offset + limit);
-			const nextOffset = offset + limit;
+			const policies = rules
+				.filter(r => r.Ptype === "p" && (subject === undefined || r.V0 === subject))
+				.map(r => ({ subject: r.V0, object: r.V1, action: r.V2 }))
+				.sort(
+					(a, b) =>
+						a.subject.localeCompare(b.subject) ||
+						a.object.localeCompare(b.object) ||
+						a.action.localeCompare(b.action)
+				);
 
-			return {
-				entities: pagePolicies,
-				cursor: nextOffset < policies.length ? String(nextOffset) : undefined
-			};
+			const page = this.paginate(policies, cursor, limit);
+			return { entities: page.items, cursor: page.cursor };
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -438,33 +479,13 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		cursor?: string,
 		limit?: number
 	): Promise<{ roles: string[]; cursor?: string }> {
-		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardModelId(modelId);
+		this.guardPaging(cursor, limit);
 
 		try {
-			const rules = await this.getAllRawPolicies(modelId);
-			const gRules = rules.filter(rule => rule.Ptype === "g");
-			const v1Set = new Set(gRules.map(r => r.V1));
-			const roleSet = new Set<string>();
-			for (const r of gRules) {
-				roleSet.add(r.V1);
-				if (v1Set.has(r.V0)) {
-					roleSet.add(r.V0);
-				}
-			}
-			const allRoles = Array.from(roleSet).sort();
-
-			if (limit === undefined) {
-				return { roles: allRoles };
-			}
-
-			const offset = cursor !== undefined ? parseInt(cursor, 10) : 0;
-			const pageRoles = allRoles.slice(offset, offset + limit);
-			const nextOffset = offset + limit;
-
-			return {
-				roles: pageRoles,
-				cursor: nextOffset < allRoles.length ? String(nextOffset) : undefined
-			};
+			const roleNames = await this.getRoleNames(modelId);
+			const page = this.paginate(Array.from(roleNames).sort(), cursor, limit);
+			return { roles: page.items, cursor: page.cursor };
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -486,24 +507,15 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * @throws GeneralError if the query fails.
 	 */
 	public async hasRoles(modelId: string, roles: string[]): Promise<boolean[]> {
-		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardModelId(modelId);
 		Guards.array<string>(CasbinAuthorizationConnector.CLASS_NAME, nameof(roles), roles);
 		for (const role of roles) {
 			this.guardNoSeparator(nameof(role), role);
 		}
 
 		try {
-			const rules = await this.getAllRawPolicies(modelId);
-			const gRules = rules.filter(rule => rule.Ptype === "g");
-			const v1Set = new Set(gRules.map(r => r.V1));
-			const roleSet = new Set<string>();
-			for (const r of gRules) {
-				roleSet.add(r.V1);
-				if (v1Set.has(r.V0)) {
-					roleSet.add(r.V0);
-				}
-			}
-			return roles.map(role => roleSet.has(role));
+			const roleNames = await this.getRoleNames(modelId);
+			return roles.map(role => roleNames.has(role));
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -526,25 +538,21 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * @throws GeneralError if the request fails.
 	 */
 	public async addRoleForSubject(modelId: string, subject: string, role: string): Promise<void> {
-		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardModelId(modelId);
 		this.guardNoSeparator(nameof(subject), subject);
 		this.guardNoSeparator(nameof(role), role);
 
 		try {
-			await this.ensureEnforcer(modelId);
-			const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
-			const response = await FetchHelper.fetchJson<
-				{ ptype: string; v0: string; v1: string },
-				ICasbinServerResponse<string>
-			>(
-				CasbinAuthorizationConnector.CLASS_NAME,
-				`${this._baseUrl}/api/add-policy?id=${encodedEnforcerId}`,
-				HttpMethod.POST,
-				{ ptype: "g", v0: subject, v1: role },
-				this._requestOptions
+			const tenantId = await this.getTenantId();
+			await this.ensureEnforcer(tenantId, modelId);
+			await this.postRule(
+				tenantId,
+				modelId,
+				"add-policy",
+				{ ptype: "g", v0: subject, v1: role, v2: CasbinAuthorizationConnector._ASSIGNMENT_MARKER },
+				"addRoleForSubjectFailed",
+				{ subject, role }
 			);
-
-			this.assertOk(response, "addRoleForSubjectFailed", { subject, role });
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -567,24 +575,23 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * @throws GeneralError if the request fails.
 	 */
 	public async removeRoleForSubject(modelId: string, subject: string, role: string): Promise<void> {
-		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardModelId(modelId);
 		this.guardNoSeparator(nameof(subject), subject);
 		this.guardNoSeparator(nameof(role), role);
 
 		try {
-			const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
-			const response = await FetchHelper.fetchJson<
-				{ ptype: string; v0: string; v1: string },
-				ICasbinServerResponse<string>
-			>(
-				CasbinAuthorizationConnector.CLASS_NAME,
-				`${this._baseUrl}/api/remove-policy?id=${encodedEnforcerId}`,
-				HttpMethod.POST,
-				{ ptype: "g", v0: subject, v1: role },
-				this._requestOptions
+			const tenantId = await this.getTenantId();
+			if (!(await this.enforcerExists(tenantId, modelId))) {
+				return;
+			}
+			await this.postRule(
+				tenantId,
+				modelId,
+				"remove-policy",
+				{ ptype: "g", v0: subject, v1: role, v2: CasbinAuthorizationConnector._ASSIGNMENT_MARKER },
+				"removeRoleForSubjectFailed",
+				{ subject, role }
 			);
-
-			this.assertOk(response, "removeRoleForSubjectFailed", { subject, role });
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -606,15 +613,35 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * @throws GeneralError if the request fails.
 	 */
 	public async removeAllRolesForSubject(modelId: string, subject: string): Promise<void> {
-		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardModelId(modelId);
 		this.guardNoSeparator(nameof(subject), subject);
 
 		try {
-			const rules = await this.getAllRawPolicies(modelId);
-			const subjectRoles = rules.filter(r => r.Ptype === "g" && r.V0 === subject);
-			for (const rule of subjectRoles) {
-				await this.removeRoleForSubject(modelId, subject, rule.V1);
+			const tenantId = await this.getTenantId();
+			if (!(await this.enforcerExists(tenantId, modelId))) {
+				return;
 			}
+			const rules = await this.getRules(tenantId, modelId, "g", 0, [subject]);
+			// Casdoor has no batch or filtered remove endpoint, so the removals are sent concurrently.
+			await Promise.all(
+				rules
+					.filter(r => this.isAssignment(r) && r.V0 === subject)
+					.map(async r =>
+						this.postRule(
+							tenantId,
+							modelId,
+							"remove-policy",
+							{
+								ptype: "g",
+								v0: subject,
+								v1: r.V1,
+								v2: CasbinAuthorizationConnector._ASSIGNMENT_MARKER
+							},
+							"removeAllRolesForSubjectFailed",
+							{ subject }
+						)
+					)
+			);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -636,12 +663,12 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * @throws GeneralError if the query fails.
 	 */
 	public async getRolesForSubject(modelId: string, subject: string): Promise<string[]> {
-		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardModelId(modelId);
 		this.guardNoSeparator(nameof(subject), subject);
 
 		try {
-			const rules = await this.getAllRawPolicies(modelId);
-			return rules.filter(r => r.Ptype === "g" && r.V0 === subject).map(r => r.V1);
+			const rules = await this.getGroupingRules(modelId, 0, subject, false);
+			return rules.map(r => r.V1);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -663,12 +690,12 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * @throws GeneralError if the query fails.
 	 */
 	public async getSubjectsForRole(modelId: string, role: string): Promise<string[]> {
-		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardModelId(modelId);
 		this.guardNoSeparator(nameof(role), role);
 
 		try {
-			const rules = await this.getAllRawPolicies(modelId);
-			return rules.filter(r => r.Ptype === "g" && r.V1 === role).map(r => r.V0);
+			const rules = await this.getGroupingRules(modelId, 1, role, false);
+			return rules.map(r => r.V0);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -691,13 +718,13 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * @throws GeneralError if the request fails.
 	 */
 	public async hasRoleForSubject(modelId: string, subject: string, role: string): Promise<boolean> {
-		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardModelId(modelId);
 		this.guardNoSeparator(nameof(subject), subject);
 		this.guardNoSeparator(nameof(role), role);
 
 		try {
-			const rules = await this.getAllRawPolicies(modelId);
-			return rules.some(r => r.Ptype === "g" && r.V0 === subject && r.V1 === role);
+			const rules = await this.getGroupingRules(modelId, 0, subject, false);
+			return rules.some(r => r.V1 === role);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -724,25 +751,26 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		role: string,
 		inheritsFrom: string
 	): Promise<void> {
-		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardModelId(modelId);
 		this.guardNoSeparator(nameof(role), role);
 		this.guardNoSeparator(nameof(inheritsFrom), inheritsFrom);
 
 		try {
-			await this.ensureEnforcer(modelId);
-			const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
-			const response = await FetchHelper.fetchJson<
-				{ ptype: string; v0: string; v1: string },
-				ICasbinServerResponse<string>
-			>(
-				CasbinAuthorizationConnector.CLASS_NAME,
-				`${this._baseUrl}/api/add-policy?id=${encodedEnforcerId}`,
-				HttpMethod.POST,
-				{ ptype: "g", v0: role, v1: inheritsFrom },
-				this._requestOptions
+			const tenantId = await this.getTenantId();
+			await this.ensureEnforcer(tenantId, modelId);
+			await this.postRule(
+				tenantId,
+				modelId,
+				"add-policy",
+				{
+					ptype: "g",
+					v0: role,
+					v1: inheritsFrom,
+					v2: CasbinAuthorizationConnector._INHERITANCE_MARKER
+				},
+				"addRoleInheritanceFailed",
+				{ role, inheritsFrom }
 			);
-
-			this.assertOk(response, "addRoleInheritanceFailed", { role, inheritsFrom });
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -769,24 +797,28 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		role: string,
 		inheritsFrom: string
 	): Promise<void> {
-		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardModelId(modelId);
 		this.guardNoSeparator(nameof(role), role);
 		this.guardNoSeparator(nameof(inheritsFrom), inheritsFrom);
 
 		try {
-			const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
-			const response = await FetchHelper.fetchJson<
-				{ ptype: string; v0: string; v1: string },
-				ICasbinServerResponse<string>
-			>(
-				CasbinAuthorizationConnector.CLASS_NAME,
-				`${this._baseUrl}/api/remove-policy?id=${encodedEnforcerId}`,
-				HttpMethod.POST,
-				{ ptype: "g", v0: role, v1: inheritsFrom },
-				this._requestOptions
+			const tenantId = await this.getTenantId();
+			if (!(await this.enforcerExists(tenantId, modelId))) {
+				return;
+			}
+			await this.postRule(
+				tenantId,
+				modelId,
+				"remove-policy",
+				{
+					ptype: "g",
+					v0: role,
+					v1: inheritsFrom,
+					v2: CasbinAuthorizationConnector._INHERITANCE_MARKER
+				},
+				"removeRoleInheritanceFailed",
+				{ role, inheritsFrom }
 			);
-
-			this.assertOk(response, "removeRoleInheritanceFailed", { role, inheritsFrom });
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -808,12 +840,12 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * @throws GeneralError if the query fails.
 	 */
 	public async getParentRoles(modelId: string, role: string): Promise<string[]> {
-		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardModelId(modelId);
 		this.guardNoSeparator(nameof(role), role);
 
 		try {
-			const rules = await this.getAllRawPolicies(modelId);
-			return rules.filter(r => r.Ptype === "g" && r.V0 === role).map(r => r.V1);
+			const rules = await this.getGroupingRules(modelId, 0, role, true);
+			return rules.map(r => r.V1);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -835,12 +867,12 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	 * @throws GeneralError if the query fails.
 	 */
 	public async getChildRoles(modelId: string, role: string): Promise<string[]> {
-		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardModelId(modelId);
 		this.guardNoSeparator(nameof(role), role);
 
 		try {
-			const rules = await this.getAllRawPolicies(modelId);
-			return rules.filter(r => r.Ptype === "g" && r.V1 === role).map(r => r.V0);
+			const rules = await this.getGroupingRules(modelId, 1, role, true);
+			return rules.map(r => r.V0);
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
@@ -855,43 +887,45 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	}
 
 	/**
-	 * Get the URL-encoded enforcer ID from the ambient tenant context and the given model identifier.
-	 * @param modelId The model identifier.
-	 * @param encode Whether to URL-encode the result (default: true).
-	 * @returns The URL-encoded enforcer ID in the form owner/modelId.
-	 * @internal
-	 */
-	private async getEncodedEnforcerId(modelId: string, encode?: boolean): Promise<string> {
-		const tenantId = await this.getTenantId();
-		const enforcerId = `${tenantId}/${modelId}`;
-		return encode === false ? enforcerId : encodeURIComponent(enforcerId);
-	}
-
-	/**
-	 * Get the tenant ID from the ambient context.
+	 * Get the tenant ID from the ambient context, falling back to "root" as the authorization service does.
 	 * @returns The tenant ID.
 	 * @internal
 	 */
 	private async getTenantId(): Promise<string> {
 		const contextIds = await ContextIdStore.getContextIds();
 		const tenantId = contextIds?.[ContextIdKeys.Tenant];
-		return Is.stringValue(tenantId) ? tenantId : "root";
+		if (!Is.stringValue(tenantId)) {
+			return "root";
+		}
+		this.guardNoPathSeparator("tenantId", tenantId);
+		return tenantId;
 	}
 
 	/**
-	 * Ensure that a Casdoor enforcer exists for the current tenant and model.
-	 * Checks that the shared RBAC model exists and creates a dedicated adapter and enforcer if
-	 * the tenant-specific enforcer does not exist.
-	 * @param modelId The model identifier (used as the enforcer name within the tenant owner).
+	 * Get the Casdoor enforcer ID for the tenant and model.
+	 * @param tenantId The tenant ID.
+	 * @param modelId The model identifier.
+	 * @returns The enforcer ID in the form owner/name.
 	 * @internal
 	 */
-	private async ensureEnforcer(modelId: string): Promise<void> {
-		const enforcerId = await this.getEncodedEnforcerId(modelId, false);
+	private getEnforcerId(tenantId: string, modelId: string): string {
+		return `${tenantId}/${modelId}`;
+	}
+
+	/**
+	 * Check whether the Casdoor enforcer exists for the tenant and model, without creating it.
+	 * @param tenantId The tenant ID.
+	 * @param modelId The model identifier.
+	 * @returns True if the enforcer exists.
+	 * @internal
+	 */
+	private async enforcerExists(tenantId: string, modelId: string): Promise<boolean> {
+		const enforcerId = this.getEnforcerId(tenantId, modelId);
 		if (this._provisionedEnforcers.has(enforcerId)) {
-			return;
+			return true;
 		}
 
-		const checkResponse = await FetchHelper.fetchJson<
+		const response = await FetchHelper.fetchJson<
 			never,
 			ICasbinServerResponse<{ owner: string } | null>
 		>(
@@ -901,18 +935,72 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 			undefined,
 			this._requestOptions
 		);
+		if (response.status !== "ok") {
+			throw new GeneralError(CasbinAuthorizationConnector.CLASS_NAME, "getEnforcerFailed", {
+				enforcerId,
+				serverMsg: response.msg
+			});
+		}
+		if (response.data === null) {
+			return false;
+		}
+		this._provisionedEnforcers.add(enforcerId);
+		return true;
+	}
 
-		if (checkResponse.status === "ok" && checkResponse.data !== null) {
-			this._provisionedEnforcers.add(enforcerId);
+	/**
+	 * Ensure that a Casdoor enforcer exists for the tenant and model, creating it if necessary.
+	 * Concurrent calls for the same enforcer are serialised so it is only provisioned once.
+	 * @param tenantId The tenant ID.
+	 * @param modelId The model identifier.
+	 * @internal
+	 */
+	private async ensureEnforcer(tenantId: string, modelId: string): Promise<void> {
+		const enforcerId = this.getEnforcerId(tenantId, modelId);
+		if (this._provisionedEnforcers.has(enforcerId)) {
 			return;
 		}
 
-		const tenantId = await this.getTenantId();
-		const name = modelId;
-		const tenantName = `${tenantId}-${name}`;
-		const adapterName = `adapter-${tenantName}`;
-		const tableName = `casbin_${tenantName.replace(/[^a-zA-Z0-9]/g, "_")}`;
-		const casdoorModelId = "built-in/user-model-built-in";
+		const lockKey = `${CasbinAuthorizationConnector.CLASS_NAME}/${enforcerId}`;
+		await Mutex.lock(lockKey, { throwOnTimeout: true });
+		try {
+			await this.provisionEnforcer(tenantId, modelId);
+		} finally {
+			Mutex.unlock(lockKey);
+		}
+	}
+
+	/**
+	 * Create the tenant model, adapter and enforcer for the tenant and model if they do not already exist.
+	 * @param tenantId The tenant ID.
+	 * @param modelId The model identifier.
+	 * @internal
+	 */
+	private async provisionEnforcer(tenantId: string, modelId: string): Promise<void> {
+		if (await this.enforcerExists(tenantId, modelId)) {
+			return;
+		}
+
+		const enforcerId = this.getEnforcerId(tenantId, modelId);
+		const assertProvisioned = (response: ICasbinServerResponse<unknown>): void => {
+			if (response.status !== "ok") {
+				throw new GeneralError(CasbinAuthorizationConnector.CLASS_NAME, "ensureEnforcerFailed", {
+					enforcerId,
+					serverMsg: response.msg
+				});
+			}
+		};
+		// The model is owned by the tenant so it is not shared with, or changeable by, other tenants.
+		const casdoorModelName = CasbinAuthorizationConnector._CASDOOR_MODEL_NAME;
+		const casdoorModelId = `${tenantId}/${casdoorModelName}`;
+		const assertModel = (response: ICasbinServerResponse<unknown>): void => {
+			if (response.status !== "ok") {
+				throw new GeneralError(CasbinAuthorizationConnector.CLASS_NAME, "ensureModelFailed", {
+					modelId: casdoorModelId,
+					serverMsg: response.msg
+				});
+			}
+		};
 		const modelResponse = await FetchHelper.fetchJson<
 			never,
 			ICasbinServerResponse<{ owner: string; name: string } | null>
@@ -923,68 +1011,277 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 			undefined,
 			this._requestOptions
 		);
+		assertModel(modelResponse);
 
-		if (modelResponse.status !== "ok" || modelResponse.data === null) {
-			throw new GeneralError(CasbinAuthorizationConnector.CLASS_NAME, "ensureModelFailed", {
-				modelId: casdoorModelId,
-				serverMsg: modelResponse.msg
-			});
+		if (modelResponse.data === null) {
+			const addModelResponse = await FetchHelper.fetchJson<
+				{ owner: string; name: string; displayName: string; modelText: string },
+				ICasbinServerResponse<unknown>
+			>(
+				CasbinAuthorizationConnector.CLASS_NAME,
+				`${this._baseUrl}/api/add-model`,
+				HttpMethod.POST,
+				{
+					owner: tenantId,
+					name: casdoorModelName,
+					displayName: casdoorModelName,
+					// The third "g" field holds the assignment or inheritance marker. Roles are resolved
+					// by this connector, so the matcher is not used for decisions.
+					modelText: `[request_definition]
+r = sub, obj, act
+
+[policy_definition]
+p = sub, obj, act
+
+[role_definition]
+g = _, _, _
+
+[policy_effect]
+e = some(where (p.eft == allow))
+
+[matchers]
+m = (r.sub == p.sub || g(r.sub, p.sub, "${CasbinAuthorizationConnector._ASSIGNMENT_MARKER}")) && r.obj == p.obj && r.act == p.act`
+				},
+				this._requestOptions
+			);
+			assertModel(addModelResponse);
 		}
 
-		await FetchHelper.fetchJson<
-			{ owner: string; name: string; table: string; useSameDb: boolean },
-			ICasbinServerResponse<null>
+		// The adapter is owned by the tenant, so its name only needs to be unique per model.
+		const adapterName = `adapter-${tenantId}-${modelId}`;
+		const adapterId = `${tenantId}/${adapterName}`;
+		const adapterResponse = await FetchHelper.fetchJson<
+			never,
+			ICasbinServerResponse<{ owner: string } | null>
 		>(
 			CasbinAuthorizationConnector.CLASS_NAME,
-			`${this._baseUrl}/api/add-adapter`,
-			HttpMethod.POST,
-			{ owner: tenantId, name: adapterName, table: tableName, useSameDb: true },
+			`${this._baseUrl}/api/get-adapter?id=${encodeURIComponent(adapterId)}`,
+			HttpMethod.GET,
+			undefined,
 			this._requestOptions
 		);
+		assertProvisioned(adapterResponse);
 
-		await FetchHelper.fetchJson<
+		if (adapterResponse.data === null) {
+			// Hash the full enforcer ID so table names cannot collide across tenants or models.
+			const tableName = `casbin_${Converter.bytesToHex(Sha256.sum256(Converter.utf8ToBytes(enforcerId))).slice(0, 40)}`;
+			const addAdapterResponse = await FetchHelper.fetchJson<
+				{ owner: string; name: string; table: string; useSameDb: boolean },
+				ICasbinServerResponse<unknown>
+			>(
+				CasbinAuthorizationConnector.CLASS_NAME,
+				`${this._baseUrl}/api/add-adapter`,
+				HttpMethod.POST,
+				{ owner: tenantId, name: adapterName, table: tableName, useSameDb: true },
+				this._requestOptions
+			);
+			assertProvisioned(addAdapterResponse);
+		}
+
+		const addEnforcerResponse = await FetchHelper.fetchJson<
 			{ owner: string; name: string; model: string; adapter: string; isEnabled: boolean },
-			ICasbinServerResponse<null>
+			ICasbinServerResponse<unknown>
 		>(
 			CasbinAuthorizationConnector.CLASS_NAME,
 			`${this._baseUrl}/api/add-enforcer`,
 			HttpMethod.POST,
 			{
 				owner: tenantId,
-				name,
+				name: modelId,
 				model: casdoorModelId,
-				adapter: `${tenantId}/${adapterName}`,
+				adapter: adapterId,
 				isEnabled: true
 			},
 			this._requestOptions
 		);
+		assertProvisioned(addEnforcerResponse);
 
 		this._provisionedEnforcers.add(enforcerId);
 	}
 
 	/**
-	 * Fetch all raw policy rules from the Casdoor enforcer for the given model.
+	 * Fetch policy rules from an existing enforcer, optionally filtered on consecutive fields.
+	 * @param tenantId The tenant ID.
 	 * @param modelId The model identifier.
-	 * @returns All rules (both "p" permission and "g" grouping types).
+	 * @param ptype The policy type to filter on.
+	 * @param fieldIndex The index of the first field to filter on.
+	 * @param fieldValues The values the fields must match, starting at fieldIndex.
+	 * @returns The matching rules.
 	 * @internal
 	 */
-	private async getAllRawPolicies(modelId: string): Promise<ICasdoorPolicyRule[]> {
-		await this.ensureEnforcer(modelId);
-
-		const encodedEnforcerId = await this.getEncodedEnforcerId(modelId);
-		const response = await FetchHelper.fetchJson<
-			never,
-			ICasbinServerResponse<ICasdoorPolicyRule[]>
-		>(
-			CasbinAuthorizationConnector.CLASS_NAME,
-			`${this._baseUrl}/api/get-policies?id=${encodedEnforcerId}`,
-			HttpMethod.GET,
-			undefined,
-			this._requestOptions
-		);
+	private async getRules(
+		tenantId: string,
+		modelId: string,
+		ptype?: string,
+		fieldIndex?: number,
+		fieldValues?: string[]
+	): Promise<ICasdoorPolicyRule[]> {
+		const encodedEnforcerId = encodeURIComponent(this.getEnforcerId(tenantId, modelId));
+		const response =
+			ptype === undefined
+				? await FetchHelper.fetchJson<never, ICasbinServerResponse<ICasdoorPolicyRule[] | null>>(
+						CasbinAuthorizationConnector.CLASS_NAME,
+						`${this._baseUrl}/api/get-policies?id=${encodedEnforcerId}`,
+						HttpMethod.GET,
+						undefined,
+						this._requestOptions
+					)
+				: await FetchHelper.fetchJson<
+						{ ptype: string; fieldIndex?: number; fieldValues?: string[] }[],
+						ICasbinServerResponse<ICasdoorPolicyRule[] | null>
+					>(
+						CasbinAuthorizationConnector.CLASS_NAME,
+						`${this._baseUrl}/api/get-filtered-policies?id=${encodedEnforcerId}`,
+						HttpMethod.POST,
+						[{ ptype, fieldIndex, fieldValues }],
+						this._requestOptions
+					);
 
 		this.assertOk(response, "getAllPoliciesFailed");
-		return response.data ?? [];
+		return (response.data ?? []).filter(r => ptype === undefined || r.Ptype === ptype);
+	}
+
+	/**
+	 * Get the role assignment or inheritance rules where the given field matches the value.
+	 * @param modelId The model identifier.
+	 * @param fieldIndex 0 to match V0, 1 to match V1.
+	 * @param value The value to match.
+	 * @param inheritance True for inheritance rules, false for assignment rules.
+	 * @returns The matching rules.
+	 * @internal
+	 */
+	private async getGroupingRules(
+		modelId: string,
+		fieldIndex: 0 | 1,
+		value: string,
+		inheritance: boolean
+	): Promise<ICasdoorPolicyRule[]> {
+		const tenantId = await this.getTenantId();
+		if (!(await this.enforcerExists(tenantId, modelId))) {
+			return [];
+		}
+		const rules = await this.getRules(tenantId, modelId, "g", fieldIndex, [value]);
+		return rules.filter(
+			r =>
+				(fieldIndex === 0 ? r.V0 : r.V1) === value &&
+				(inheritance ? this.isInheritance(r) : this.isAssignment(r))
+		);
+	}
+
+	/**
+	 * Get the distinct role names: roles assigned to subjects and roles inherited from.
+	 * @param modelId The model identifier.
+	 * @returns The role names.
+	 * @internal
+	 */
+	private async getRoleNames(modelId: string): Promise<Set<string>> {
+		const tenantId = await this.getTenantId();
+		if (!(await this.enforcerExists(tenantId, modelId))) {
+			return new Set<string>();
+		}
+		// Filtering on all "g" rows is not reliable through the Casdoor filter API, so fetch all.
+		const rules = await this.getRules(tenantId, modelId);
+		return new Set(rules.filter(r => r.Ptype === "g").map(r => r.V1));
+	}
+
+	/**
+	 * Post a single rule to an add or remove endpoint.
+	 * @param tenantId The tenant ID.
+	 * @param modelId The model identifier.
+	 * @param endpoint The endpoint name.
+	 * @param rule The rule to post.
+	 * @param errorKey The i18n error key to use on failure.
+	 * @param properties Additional properties for the error.
+	 * @internal
+	 */
+	private async postRule(
+		tenantId: string,
+		modelId: string,
+		endpoint: "add-policy" | "remove-policy",
+		rule: { [key: string]: string },
+		errorKey: string,
+		properties: { [key: string]: unknown }
+	): Promise<void> {
+		const encodedEnforcerId = encodeURIComponent(this.getEnforcerId(tenantId, modelId));
+		const response = await FetchHelper.fetchJson<
+			{ [key: string]: string },
+			ICasbinServerResponse<string>
+		>(
+			CasbinAuthorizationConnector.CLASS_NAME,
+			`${this._baseUrl}/api/${endpoint}?id=${encodedEnforcerId}`,
+			HttpMethod.POST,
+			rule,
+			this._requestOptions
+		);
+		this.assertOk(response, errorKey, properties);
+	}
+
+	/**
+	 * Is the rule a role assignment.
+	 * @param rule The rule.
+	 * @returns True if the rule is a role assignment.
+	 * @internal
+	 */
+	private isAssignment(rule: ICasdoorPolicyRule): boolean {
+		return rule.Ptype === "g" && rule.V2 === CasbinAuthorizationConnector._ASSIGNMENT_MARKER;
+	}
+
+	/**
+	 * Is the rule a role inheritance.
+	 * @param rule The rule.
+	 * @returns True if the rule is a role inheritance.
+	 * @internal
+	 */
+	private isInheritance(rule: ICasdoorPolicyRule): boolean {
+		return rule.Ptype === "g" && rule.V2 === CasbinAuthorizationConnector._INHERITANCE_MARKER;
+	}
+
+	/**
+	 * Slice a sorted list into a page using an offset cursor.
+	 * @param items The sorted items.
+	 * @param cursor The offset cursor.
+	 * @param limit The page size.
+	 * @returns The page and the cursor for the next page.
+	 * @internal
+	 */
+	private paginate<T>(
+		items: T[],
+		cursor?: string,
+		limit?: number
+	): { items: T[]; cursor?: string } {
+		const offset = cursor === undefined ? 0 : Number.parseInt(cursor, 10);
+		const pageSize = limit ?? CasbinAuthorizationConnector._DEFAULT_PAGE_SIZE;
+		const nextOffset = offset + pageSize;
+		return {
+			items: items.slice(offset, nextOffset),
+			cursor: nextOffset < items.length ? String(nextOffset) : undefined
+		};
+	}
+
+	/**
+	 * Validate the paging parameters.
+	 * @param cursor The cursor, which must be a non-negative integer string.
+	 * @param limit The limit, which must be a positive integer.
+	 * @throws GuardError if either value is invalid.
+	 * @internal
+	 */
+	private guardPaging(cursor?: string, limit?: number): void {
+		if (cursor !== undefined && !/^\d+$/.test(cursor)) {
+			throw new GuardError(
+				CasbinAuthorizationConnector.CLASS_NAME,
+				"invalidCursor",
+				nameof(cursor),
+				cursor
+			);
+		}
+		if (limit !== undefined && (!Is.integer(limit) || limit <= 0)) {
+			throw new GuardError(
+				CasbinAuthorizationConnector.CLASS_NAME,
+				"invalidLimit",
+				nameof(limit),
+				limit
+			);
+		}
 	}
 
 	/**
@@ -1009,6 +1306,17 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 	}
 
 	/**
+	 * Validate a model identifier, which is used as a Casdoor enforcer name.
+	 * @param modelId The model identifier.
+	 * @throws GeneralError If the value contains a "|" or "/" character.
+	 * @internal
+	 */
+	private guardModelId(modelId: string): void {
+		this.guardNoSeparator(nameof(modelId), modelId);
+		this.guardNoPathSeparator(nameof(modelId), modelId);
+	}
+
+	/**
 	 * Throw a GeneralError if the value contains the pipe separator character.
 	 * @param fieldName The field name for the error context.
 	 * @param value The value to validate.
@@ -1019,6 +1327,21 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 		Guards.stringValue(CasbinAuthorizationConnector.CLASS_NAME, fieldName, value);
 		if (value.includes("|")) {
 			throw new GeneralError(CasbinAuthorizationConnector.CLASS_NAME, "containsSeparator", {
+				fieldName
+			});
+		}
+	}
+
+	/**
+	 * Throw a GeneralError if the value contains a "/", as Casdoor uses it to separate owner and name.
+	 * @param fieldName The field name for the error context.
+	 * @param value The value to validate.
+	 * @throws GeneralError If the value contains a "/" character.
+	 * @internal
+	 */
+	private guardNoPathSeparator(fieldName: string, value: string): void {
+		if (value.includes("/")) {
+			throw new GeneralError(CasbinAuthorizationConnector.CLASS_NAME, "containsPathSeparator", {
 				fieldName
 			});
 		}

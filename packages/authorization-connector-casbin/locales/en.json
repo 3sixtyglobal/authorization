@@ -9,6 +9,8 @@
 			"casbinConnectionFailed": "Failed to connect to Casbin server at \"{address}\".",
 			"checkFailed": "Failed to check authorization for subject \"{subject}\" on object \"{object}\" with action \"{action}\".",
 			"ensureModelFailed": "Failed to ensure the Casdoor authorization model \"{modelId}\" exists.",
+			"ensureEnforcerFailed": "Failed to create the Casdoor enforcer \"{enforcerId}\".",
+			"getEnforcerFailed": "Failed to retrieve the Casdoor enforcer \"{enforcerId}\".",
 			"addPolicyFailed": "Failed to add authorization policy for subject \"{subject}\".",
 			"removePolicyFailed": "Failed to remove authorization policy for subject \"{subject}\".",
 			"getAllPoliciesFailed": "Failed to retrieve all authorization policies.",
@@ -25,7 +27,10 @@
 			"getParentRolesFailed": "Failed to retrieve parent roles for role \"{role}\".",
 			"getChildRolesFailed": "Failed to retrieve child roles for role \"{role}\".",
 			"buildFailed": "Failed to build the authorization model.",
-			"containsSeparator": "The field \"{fieldName}\" must not contain the \"|\" separator character."
+			"containsSeparator": "The field \"{fieldName}\" must not contain the \"|\" separator character.",
+			"containsPathSeparator": "The field \"{fieldName}\" must not contain the \"/\" character.",
+			"invalidCursor": "Property \"{property}\" must be a non-negative integer string, it is \"{value}\"",
+			"invalidLimit": "Property \"{property}\" must be a positive integer, it is \"{value}\""
 		}
 	}
 }

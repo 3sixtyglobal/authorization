@@ -3,6 +3,11 @@
 import { HeaderTypes, HttpStatusCode, MimeTypes } from "@3sixty/web";
 
 /**
+ * The global fetch captured before the mock was installed.
+ */
+let originalFetch: typeof fetch | undefined;
+
+/**
  * Minimal 204 No-Content response accepted by BaseRestClient.
  * Use for operations that return void.
  * @returns A fake 204 response object.
@@ -79,6 +84,7 @@ export function createdResponse(location: string): object {
  * @param mock The vi.fn() mock to install as globalThis.fetch.
  */
 export function setupFetchMock(mock: typeof fetch): void {
+	originalFetch ??= globalThis.fetch;
 	globalThis.fetch = mock;
 }
 
@@ -90,4 +96,8 @@ export function setupFetchMock(mock: typeof fetch): void {
  */
 export function teardownFetchMock(mock: { mockReset(): void }): void {
 	mock.mockReset();
+	if (originalFetch) {
+		globalThis.fetch = originalFetch;
+		originalFetch = undefined;
+	}
 }

@@ -1,6 +1,7 @@
 // Copyright 2024 IOTA Stiftung.
 // SPDX-License-Identifier: Apache-2.0.
 import {
+	ForbiddenError,
 	HttpErrorHelper,
 	type IBaseRoute,
 	type IBaseRouteProcessor,
@@ -97,8 +98,10 @@ export class AuthorizationRouteProcessor implements IBaseRouteProcessor {
 				}
 
 				const userId = contextIds[ContextIdKeys.User];
+				if (!Is.stringValue(userId)) {
+					throw new UnauthorizedError(AuthorizationRouteProcessor.CLASS_NAME, "accessDenied");
+				}
 				if (
-					!Is.stringValue(userId) ||
 					!(await this._authorizationComponent.check(
 						this._authorizationModelId,
 						userId,
@@ -106,13 +109,14 @@ export class AuthorizationRouteProcessor implements IBaseRouteProcessor {
 						"execute"
 					))
 				) {
-					throw new UnauthorizedError(AuthorizationRouteProcessor.CLASS_NAME, "accessDenied");
+					throw new ForbiddenError(AuthorizationRouteProcessor.CLASS_NAME, "accessDenied");
 				}
 			} catch (err) {
+				const { httpStatusCode } = HttpErrorHelper.processError(err, this._includeErrorStack);
 				HttpErrorHelper.buildResponse(
 					response,
 					BaseError.fromError(err),
-					HttpStatusCode.unauthorized,
+					httpStatusCode,
 					this._includeErrorStack
 				);
 			}
