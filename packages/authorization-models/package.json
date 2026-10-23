@@ -1,6 +1,6 @@
 {
 	"name": "@3sixty/authorization-models",
-	"version": "0.20.0-next.0",
+	"version": "0.20.0-next.1",
 	"description": "Shared interfaces and contract models for authorisation components.",
 	"repository": {
 		"type": "git",
