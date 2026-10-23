@@ -18,7 +18,15 @@ Class describing an authorization policy entity stored in entity storage.
 
 > **id**: `string`
 
-The compound identifier for this policy rule, in "subject|object|action" format.
+The compound identifier for this policy rule, in "modelId|subject|object|action" format.
+
+***
+
+### modelId {#modelid}
+
+> **modelId**: `string`
+
+The model identifier partitioning this policy.
 
 ***
 

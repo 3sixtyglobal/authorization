@@ -18,7 +18,15 @@ Class describing an authorization role assignment entity stored in entity storag
 
 > **id**: `string`
 
-The compound identifier for this role assignment, in "subject|role" format.
+The compound identifier for this role assignment, in "modelId|subject|role" format.
+
+***
+
+### modelId {#modelid}
+
+> **modelId**: `string`
+
+The model identifier partitioning this assignment.
 
 ***
 

@@ -28,7 +28,7 @@ The constructor options.
 
 #### Throws
 
-If no authorization connectors are registered.
+GeneralError If no authorization connectors are registered.
 
 ## Properties
 
@@ -37,6 +37,22 @@ If no authorization connectors are registered.
 > `readonly` `static` **CLASS\_NAME**: `string`
 
 Runtime name for the class.
+
+***
+
+### DEFAULT\_AUTHORIZATION\_MODEL\_ID {#default_authorization_model_id}
+
+> `readonly` `static` **DEFAULT\_AUTHORIZATION\_MODEL\_ID**: `string` = `"system"`
+
+The model identifier that is reserved for system-only use.
+
+***
+
+### DEFAULT\_ESCALATED\_PRIVILEGE\_ROLE {#default_escalated_privilege_role}
+
+> `readonly` `static` **DEFAULT\_ESCALATED\_PRIVILEGE\_ROLE**: `string` = `"global-admin"`
+
+The role that bypasses all escalation guards when held by the caller.
 
 ## Methods
 
@@ -62,7 +78,7 @@ The class name of the component.
 
 > **start**(): `Promise`\<`void`\>
 
-Registers the authorization metrics with the telemetry component.
+Start the service, applying default rules and registering telemetry metrics.
 
 #### Returns
 
@@ -74,13 +90,51 @@ Registers the authorization metrics with the telemetry component.
 
 ***
 
+### build() {#build}
+
+> **build**(`modelId`, `model`): `Promise`\<`void`\>
+
+Build the authorization model by applying a set of policies and role inheritances.
+
+#### Parameters
+
+##### modelId
+
+`string`
+
+The model identifier selecting which policy set to use.
+
+##### model
+
+`IAuthorizationModel`
+
+The policies and role inheritances to apply.
+
+#### Returns
+
+`Promise`\<`void`\>
+
+Nothing.
+
+#### Implementation of
+
+`IAuthorizationComponent.build`
+
+***
+
 ### check() {#check}
 
-> **check**(`subject`, `object`, `action`): `Promise`\<`boolean`\>
+> **check**(`modelId`, `subject`, `object`, `action`): `Promise`\<`boolean`\>
 
 Check whether a subject is permitted to perform an action on a resource.
 
 #### Parameters
+
+##### modelId
+
+`string`
+
+The model identifier selecting which policy set to use.
 
 ##### subject
 
@@ -114,17 +168,35 @@ True if access is granted, false otherwise.
 
 ### addPolicy() {#addpolicy}
 
-> **addPolicy**(`policy`): `Promise`\<`void`\>
+> **addPolicy**(`modelId`, `subject`, `object`, `action`): `Promise`\<`void`\>
 
 Add a policy rule.
 
 #### Parameters
 
-##### policy
+##### modelId
 
-`IAuthorizationPolicy`
+`string`
 
-The policy to add.
+The model identifier selecting which policy set to use.
+
+##### subject
+
+`string`
+
+The subject the policy applies to.
+
+##### object
+
+`string`
+
+The object the policy applies to.
+
+##### action
+
+`string`
+
+The action the policy applies to.
 
 #### Returns
 
@@ -140,17 +212,35 @@ Nothing.
 
 ### removePolicy() {#removepolicy}
 
-> **removePolicy**(`policy`): `Promise`\<`void`\>
+> **removePolicy**(`modelId`, `subject`, `object`, `action`): `Promise`\<`void`\>
 
 Remove a policy rule.
 
 #### Parameters
 
-##### policy
+##### modelId
 
-`IAuthorizationPolicy`
+`string`
 
-The policy to remove.
+The model identifier selecting which policy set to use.
+
+##### subject
+
+`string`
+
+The subject of the policy to remove.
+
+##### object
+
+`string`
+
+The object of the policy to remove.
+
+##### action
+
+`string`
+
+The action of the policy to remove.
 
 #### Returns
 
@@ -166,11 +256,17 @@ Nothing.
 
 ### getPoliciesForSubject() {#getpoliciesforsubject}
 
-> **getPoliciesForSubject**(`subject`): `Promise`\<`IAuthorizationPolicy`[]\>
+> **getPoliciesForSubject**(`modelId`, `subject`, `cursor?`, `limit?`): `Promise`\<\{ `entities`: `IAuthorizationPolicy`[]; `cursor?`: `string`; \}\>
 
 Get all policy rules for a given subject.
 
 #### Parameters
+
+##### modelId
+
+`string`
+
+The model identifier selecting which policy set to use.
 
 ##### subject
 
@@ -178,11 +274,23 @@ Get all policy rules for a given subject.
 
 The subject to query.
 
+##### cursor?
+
+`string`
+
+The cursor to request the next chunk of results.
+
+##### limit?
+
+`number`
+
+Limit the number of entities to return.
+
 #### Returns
 
-`Promise`\<`IAuthorizationPolicy`[]\>
+`Promise`\<\{ `entities`: `IAuthorizationPolicy`[]; `cursor?`: `string`; \}\>
 
-The matching policies.
+The matching policies and an optional cursor for the next page.
 
 #### Implementation of
 
@@ -192,11 +300,17 @@ The matching policies.
 
 ### getAllPolicies() {#getallpolicies}
 
-> **getAllPolicies**(`subject?`, `cursor?`, `limit?`): `Promise`\<\{ `entities`: `IAuthorizationPolicy`[]; `cursor?`: `string`; \}\>
+> **getAllPolicies**(`modelId`, `subject?`, `cursor?`, `limit?`): `Promise`\<\{ `entities`: `IAuthorizationPolicy`[]; `cursor?`: `string`; \}\>
 
 Get policy rules, optionally filtered by subject.
 
 #### Parameters
+
+##### modelId
+
+`string`
+
+The model identifier selecting which policy set to use.
 
 ##### subject?
 
@@ -230,11 +344,17 @@ The matching policies and an optional cursor for the next page.
 
 ### getAllRoles() {#getallroles}
 
-> **getAllRoles**(`cursor?`, `limit?`): `Promise`\<\{ `roles`: `string`[]; `cursor?`: `string`; \}\>
+> **getAllRoles**(`modelId`, `cursor?`, `limit?`): `Promise`\<\{ `roles`: `string`[]; `cursor?`: `string`; \}\>
 
 Get all distinct role names in the system.
 
 #### Parameters
+
+##### modelId
+
+`string`
+
+The model identifier selecting which policy set to use.
 
 ##### cursor?
 
@@ -260,13 +380,51 @@ The role names and an optional cursor for the next page.
 
 ***
 
+### hasRoles() {#hasroles}
+
+> **hasRoles**(`modelId`, `roles`): `Promise`\<`boolean`[]\>
+
+Check whether each of the given role names exists in the system.
+
+#### Parameters
+
+##### modelId
+
+`string`
+
+The model identifier selecting which policy set to use.
+
+##### roles
+
+`string`[]
+
+The role names to check.
+
+#### Returns
+
+`Promise`\<`boolean`[]\>
+
+An array of booleans in the same order as the input.
+
+#### Implementation of
+
+`IAuthorizationComponent.hasRoles`
+
+***
+
 ### addRoleForSubject() {#addroleforsubject}
 
-> **addRoleForSubject**(`subject`, `role`): `Promise`\<`void`\>
+> **addRoleForSubject**(`modelId`, `subject`, `role`): `Promise`\<`void`\>
 
 Assign a role to a subject.
 
 #### Parameters
+
+##### modelId
+
+`string`
+
+The model identifier selecting which policy set to use.
 
 ##### subject
 
@@ -294,11 +452,17 @@ Nothing.
 
 ### removeRoleForSubject() {#removeroleforsubject}
 
-> **removeRoleForSubject**(`subject`, `role`): `Promise`\<`void`\>
+> **removeRoleForSubject**(`modelId`, `subject`, `role`): `Promise`\<`void`\>
 
 Remove a role from a subject.
 
 #### Parameters
+
+##### modelId
+
+`string`
+
+The model identifier selecting which policy set to use.
 
 ##### subject
 
@@ -326,11 +490,17 @@ Nothing.
 
 ### removeAllRolesForSubject() {#removeallrolesforsubject}
 
-> **removeAllRolesForSubject**(`subject`): `Promise`\<`void`\>
+> **removeAllRolesForSubject**(`modelId`, `subject`): `Promise`\<`void`\>
 
 Remove all roles from a subject.
 
 #### Parameters
+
+##### modelId
+
+`string`
+
+The model identifier selecting which policy set to use.
 
 ##### subject
 
@@ -352,11 +522,17 @@ Nothing.
 
 ### getRolesForSubject() {#getrolesforsubject}
 
-> **getRolesForSubject**(`subject`): `Promise`\<`string`[]\>
+> **getRolesForSubject**(`modelId`, `subject`): `Promise`\<`string`[]\>
 
 Get all roles assigned to a subject.
 
 #### Parameters
+
+##### modelId
+
+`string`
+
+The model identifier selecting which policy set to use.
 
 ##### subject
 
@@ -378,11 +554,17 @@ The assigned roles.
 
 ### getSubjectsForRole() {#getsubjectsforrole}
 
-> **getSubjectsForRole**(`role`): `Promise`\<`string`[]\>
+> **getSubjectsForRole**(`modelId`, `role`): `Promise`\<`string`[]\>
 
 Get all subjects assigned to a given role.
 
 #### Parameters
+
+##### modelId
+
+`string`
+
+The model identifier selecting which policy set to use.
 
 ##### role
 
@@ -404,11 +586,17 @@ The subjects with the given role.
 
 ### hasRoleForSubject() {#hasroleforsubject}
 
-> **hasRoleForSubject**(`subject`, `role`): `Promise`\<`boolean`\>
+> **hasRoleForSubject**(`modelId`, `subject`, `role`): `Promise`\<`boolean`\>
 
 Check whether a subject has a specific role.
 
 #### Parameters
+
+##### modelId
+
+`string`
+
+The model identifier selecting which policy set to use.
 
 ##### subject
 
@@ -436,11 +624,17 @@ True if the subject has the role.
 
 ### addRoleInheritance() {#addroleinheritance}
 
-> **addRoleInheritance**(`role`, `parentRole`): `Promise`\<`void`\>
+> **addRoleInheritance**(`modelId`, `role`, `inheritsFrom`): `Promise`\<`void`\>
 
 Define a parent-child inheritance relationship between two roles.
 
 #### Parameters
+
+##### modelId
+
+`string`
+
+The model identifier selecting which policy set to use.
 
 ##### role
 
@@ -448,7 +642,7 @@ Define a parent-child inheritance relationship between two roles.
 
 The child role that will inherit permissions from the parent.
 
-##### parentRole
+##### inheritsFrom
 
 `string`
 
@@ -468,11 +662,17 @@ Nothing.
 
 ### removeRoleInheritance() {#removeroleinheritance}
 
-> **removeRoleInheritance**(`role`, `parentRole`): `Promise`\<`void`\>
+> **removeRoleInheritance**(`modelId`, `role`, `inheritsFrom`): `Promise`\<`void`\>
 
 Remove a parent-child inheritance relationship between two roles.
 
 #### Parameters
+
+##### modelId
+
+`string`
+
+The model identifier selecting which policy set to use.
 
 ##### role
 
@@ -480,7 +680,7 @@ Remove a parent-child inheritance relationship between two roles.
 
 The child role.
 
-##### parentRole
+##### inheritsFrom
 
 `string`
 
@@ -500,11 +700,17 @@ Nothing.
 
 ### getParentRoles() {#getparentroles}
 
-> **getParentRoles**(`role`): `Promise`\<`string`[]\>
+> **getParentRoles**(`modelId`, `role`): `Promise`\<`string`[]\>
 
 Get all roles that a given role directly inherits from.
 
 #### Parameters
+
+##### modelId
+
+`string`
+
+The model identifier selecting which policy set to use.
 
 ##### role
 
@@ -526,11 +732,17 @@ The parent roles.
 
 ### getChildRoles() {#getchildroles}
 
-> **getChildRoles**(`role`): `Promise`\<`string`[]\>
+> **getChildRoles**(`modelId`, `role`): `Promise`\<`string`[]\>
 
 Get all roles that directly inherit from a given role.
 
 #### Parameters
+
+##### modelId
+
+`string`
+
+The model identifier selecting which policy set to use.
 
 ##### role
 

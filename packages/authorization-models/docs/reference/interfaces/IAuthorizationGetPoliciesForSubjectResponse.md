@@ -10,8 +10,14 @@ Response for getting authorization policies for a subject.
 
 The response body.
 
-#### policies
+#### entities
 
-> **policies**: [`IAuthorizationPolicy`](IAuthorizationPolicy.md)[]
+> **entities**: [`IAuthorizationPolicy`](IAuthorizationPolicy.md)[]
 
 The list of policies for the subject.
+
+#### cursor?
+
+> `optional` **cursor?**: `string`
+
+An optional cursor for the next page of results.

@@ -10,14 +10,20 @@ Request to remove a role inheritance.
 
 The request path parameters.
 
+#### modelId
+
+> **modelId**: `string`
+
+The model identifier selecting which policy set to use.
+
 #### role
 
 > **role**: `string`
 
 The role to remove the inheritance from.
 
-#### parentRole
+#### inheritsFrom
 
-> **parentRole**: `string`
+> **inheritsFrom**: `string`
 
 The parent role to remove.

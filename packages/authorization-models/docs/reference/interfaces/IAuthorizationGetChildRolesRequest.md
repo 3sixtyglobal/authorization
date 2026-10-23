@@ -10,6 +10,12 @@ Request to get child roles for a role.
 
 The request path parameters.
 
+#### modelId
+
+> **modelId**: `string`
+
+The model identifier selecting which policy set to use.
+
 #### role
 
 > **role**: `string`

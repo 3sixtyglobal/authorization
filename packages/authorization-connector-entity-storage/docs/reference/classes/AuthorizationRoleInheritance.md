@@ -18,7 +18,15 @@ Class describing an authorization role inheritance entity stored in entity stora
 
 > **id**: `string`
 
-The compound identifier for this inheritance relationship, in "role|parentRole" format.
+The compound identifier for this inheritance relationship, in "modelId|role|inheritsFrom" format.
+
+***
+
+### modelId {#modelid}
+
+> **modelId**: `string`
+
+The model identifier partitioning this inheritance.
 
 ***
 
@@ -30,8 +38,8 @@ The child role that inherits permissions from the parent.
 
 ***
 
-### parentRole {#parentrole}
+### inheritsFrom {#inheritsfrom}
 
-> **parentRole**: `string`
+> **inheritsFrom**: `string`
 
 The parent role whose permissions are inherited.

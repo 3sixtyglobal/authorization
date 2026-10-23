@@ -10,6 +10,12 @@ Request to add a role inheritance.
 
 The request path parameters.
 
+#### modelId
+
+> **modelId**: `string`
+
+The model identifier selecting which policy set to use.
+
 #### role
 
 > **role**: `string`
@@ -24,8 +30,8 @@ The role to add the inheritance to.
 
 The request data.
 
-#### parentRole
+#### inheritsFrom
 
-> **parentRole**: `string`
+> **inheritsFrom**: `string`
 
 The parent role to inherit from.

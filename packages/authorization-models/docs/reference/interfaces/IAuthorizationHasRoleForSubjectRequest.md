@@ -10,6 +10,12 @@ Request to check if a subject has a role.
 
 The request path parameters.
 
+#### modelId
+
+> **modelId**: `string`
+
+The model identifier selecting which policy set to use.
+
 #### subject
 
 > **subject**: `string`
