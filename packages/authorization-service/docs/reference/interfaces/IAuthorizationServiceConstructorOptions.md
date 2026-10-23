@@ -4,6 +4,14 @@ Options for the authorization service constructor.
 
 ## Properties
 
+### loggingComponentType? {#loggingcomponenttype}
+
+> `optional` **loggingComponentType?**: `string`
+
+The component type for the optional logging component.
+
+***
+
 ### telemetryComponentType? {#telemetrycomponenttype}
 
 > `optional` **telemetryComponentType?**: `string`

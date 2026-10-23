@@ -3,9 +3,12 @@
 ## Classes
 
 - [AuthorizationService](classes/AuthorizationService.md)
+- [AuthorizationRouteProcessor](classes/AuthorizationRouteProcessor.md)
 
 ## Interfaces
 
+- [IAuthorizationRouteProcessorConfig](interfaces/IAuthorizationRouteProcessorConfig.md)
+- [IAuthorizationRouteProcessorConstructorOptions](interfaces/IAuthorizationRouteProcessorConstructorOptions.md)
 - [IAuthorizationServiceConfig](interfaces/IAuthorizationServiceConfig.md)
 - [IAuthorizationServiceConstructorOptions](interfaces/IAuthorizationServiceConstructorOptions.md)
 
@@ -22,6 +25,7 @@
 - [authorizationRemovePolicy](functions/authorizationRemovePolicy.md)
 - [authorizationGetAllPolicies](functions/authorizationGetAllPolicies.md)
 - [authorizationGetAllRoles](functions/authorizationGetAllRoles.md)
+- [authorizationHasRoles](functions/authorizationHasRoles.md)
 - [authorizationGetPoliciesForSubject](functions/authorizationGetPoliciesForSubject.md)
 - [authorizationAddRoleForSubject](functions/authorizationAddRoleForSubject.md)
 - [authorizationRemoveRoleForSubject](functions/authorizationRemoveRoleForSubject.md)
@@ -33,3 +37,4 @@
 - [authorizationRemoveRoleInheritance](functions/authorizationRemoveRoleInheritance.md)
 - [authorizationGetParentRoles](functions/authorizationGetParentRoles.md)
 - [authorizationGetChildRoles](functions/authorizationGetChildRoles.md)
+- [authorizationBuild](functions/authorizationBuild.md)

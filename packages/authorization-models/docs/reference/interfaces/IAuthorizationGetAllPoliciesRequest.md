@@ -4,6 +4,20 @@ Request to get all authorization policies.
 
 ## Properties
 
+### pathParams {#pathparams}
+
+> **pathParams**: `object`
+
+The request path parameters.
+
+#### modelId
+
+> **modelId**: `string`
+
+The model identifier selecting which policy set to use.
+
+***
+
 ### query? {#query}
 
 > `optional` **query?**: `object`

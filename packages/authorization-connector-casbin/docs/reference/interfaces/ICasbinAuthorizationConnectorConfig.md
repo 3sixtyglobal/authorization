@@ -28,14 +28,6 @@ The OAuth2 client secret for authenticating with the Casbin server API.
 
 ***
 
-### enforcerId {#enforcerid}
-
-> **enforcerId**: `string`
-
-The enforcer identifier in "owner/name" format (e.g. "built-in/built-in").
-
-***
-
 ### timeoutMs? {#timeoutms}
 
 > `optional` **timeoutMs?**: `number`

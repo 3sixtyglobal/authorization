@@ -5,11 +5,11 @@
 - [AuthorizationPolicy](classes/AuthorizationPolicy.md)
 - [AuthorizationRoleAssignment](classes/AuthorizationRoleAssignment.md)
 - [AuthorizationRoleInheritance](classes/AuthorizationRoleInheritance.md)
+- [AuthorizationRoleName](classes/AuthorizationRoleName.md)
 - [EntityStorageAuthorizationConnector](classes/EntityStorageAuthorizationConnector.md)
 
 ## Interfaces
 
-- [IEntityStorageAuthorizationConnectorConfig](interfaces/IEntityStorageAuthorizationConnectorConfig.md)
 - [IEntityStorageAuthorizationConnectorConstructorOptions](interfaces/IEntityStorageAuthorizationConnectorConstructorOptions.md)
 
 ## Functions

@@ -21,12 +21,144 @@
 		}
 	],
 	"paths": {
-		"/authorization/check": {
+		"/authorization/{modelId}": {
+			"post": {
+				"operationId": "authorizationBuild",
+				"summary": "Build an authorization model",
+				"tags": [
+					"Authorization"
+				],
+				"parameters": [
+					{
+						"name": "modelId",
+						"description": "The model identifier selecting which policy set to use.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "default"
+					}
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"requestBody": {
+					"description": "Request to build an authorization model.",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/AuthorizationModel"
+							},
+							"examples": {
+								"authorizationBuildExample": {
+									"value": {
+										"policies": [
+											{
+												"subject": "tenant:read",
+												"object": "authorizationCheck",
+												"action": "execute"
+											}
+										],
+										"roleInheritances": [
+											{
+												"role": "authorization-admin",
+												"inheritsFrom": "tenant:read"
+											}
+										]
+									}
+								}
+							}
+						}
+					}
+				},
+				"responses": {
+					"204": {
+						"description": "The rest request ended in success with no data."
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/authorization/{modelId}/check": {
 			"post": {
 				"operationId": "authorizationCheck",
 				"summary": "Check an authorization policy",
 				"tags": [
 					"Authorization"
+				],
+				"parameters": [
+					{
+						"name": "modelId",
+						"description": "The model identifier selecting which policy set to use.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "default"
+					}
 				],
 				"security": [
 					{
@@ -131,12 +263,25 @@
 				}
 			}
 		},
-		"/authorization/policy": {
+		"/authorization/{modelId}/policy": {
 			"post": {
 				"operationId": "authorizationAddPolicy",
 				"summary": "Add an authorization policy",
 				"tags": [
 					"Authorization"
+				],
+				"parameters": [
+					{
+						"name": "modelId",
+						"description": "The model identifier selecting which policy set to use.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "default"
+					}
 				],
 				"security": [
 					{
@@ -233,6 +378,17 @@
 					"Authorization"
 				],
 				"parameters": [
+					{
+						"name": "modelId",
+						"description": "The model identifier selecting which policy set to use.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "default"
+					},
 					{
 						"name": "subject",
 						"description": "Filter policies by subject.",
@@ -352,12 +508,25 @@
 				}
 			}
 		},
-		"/authorization/policy/remove": {
+		"/authorization/{modelId}/policy/remove": {
 			"post": {
 				"operationId": "authorizationRemovePolicy",
 				"summary": "Remove an authorization policy",
 				"tags": [
 					"Authorization"
+				],
+				"parameters": [
+					{
+						"name": "modelId",
+						"description": "The model identifier selecting which policy set to use.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "default"
+					}
 				],
 				"security": [
 					{
@@ -448,7 +617,7 @@
 				}
 			}
 		},
-		"/authorization/roles": {
+		"/authorization/{modelId}/roles": {
 			"get": {
 				"operationId": "authorizationGetAllRoles",
 				"summary": "Get all authorization roles",
@@ -456,6 +625,17 @@
 					"Authorization"
 				],
 				"parameters": [
+					{
+						"name": "modelId",
+						"description": "The model identifier selecting which policy set to use.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "default"
+					},
 					{
 						"name": "cursor",
 						"description": "The cursor to request the next chunk of results.",
@@ -563,7 +743,136 @@
 				}
 			}
 		},
-		"/authorization/policy/{subject}": {
+		"/authorization/{modelId}/roles/has": {
+			"post": {
+				"operationId": "authorizationHasRoles",
+				"summary": "Check whether a list of roles exist in the system",
+				"tags": [
+					"Authorization"
+				],
+				"parameters": [
+					{
+						"name": "modelId",
+						"description": "The model identifier selecting which policy set to use.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "default"
+					}
+				],
+				"security": [
+					{
+						"jwtBearerAuthScheme": []
+					}
+				],
+				"requestBody": {
+					"description": "Request to check whether a list of roles exist in the system.",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/AuthorizationHasRolesRequest"
+							},
+							"examples": {
+								"authorizationHasRolesExample": {
+									"value": {
+										"roles": [
+											"admin",
+											"editor",
+											"unknown-role"
+										]
+									}
+								}
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "Response for checking whether a list of roles exist in the system.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AuthorizationHasRolesResponse"
+								},
+								"examples": {
+									"authorizationHasRolesResponseExample": {
+										"value": {
+											"exists": [
+												true,
+												true,
+												false
+											]
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "The server cannot process the request, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "GeneralError",
+											"message": "errorMessage",
+											"properties": {
+												"foo": "bar"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "You are not authorized to use the API or no credentials were supplied, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "UnauthorizedError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "The server has encountered a situation it does not know how to handle, see the content for more details.",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Error"
+								},
+								"examples": {
+									"exampleResponse": {
+										"value": {
+											"name": "InternalServerError",
+											"message": "errorMessage"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/authorization/{modelId}/policy/{subject}": {
 			"get": {
 				"operationId": "authorizationGetPoliciesForSubject",
 				"summary": "Get authorization policies for a subject",
@@ -571,6 +880,17 @@
 					"Authorization"
 				],
 				"parameters": [
+					{
+						"name": "modelId",
+						"description": "The model identifier selecting which policy set to use.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "default"
+					},
 					{
 						"name": "subject",
 						"description": "The subject to get policies for.",
@@ -581,6 +901,24 @@
 						},
 						"style": "simple",
 						"example": "user1"
+					},
+					{
+						"name": "cursor",
+						"description": "The cursor to request the next chunk of results.",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"name": "limit",
+						"description": "Limit the number of entities to return.",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
 					}
 				],
 				"security": [
@@ -599,7 +937,7 @@
 								"examples": {
 									"authorizationGetPoliciesForSubjectResponseExample": {
 										"value": {
-											"policies": [
+											"entities": [
 												{
 													"subject": "user1",
 													"object": "/data",
@@ -672,7 +1010,7 @@
 				}
 			}
 		},
-		"/authorization/subject/{subject}/role": {
+		"/authorization/{modelId}/subject/{subject}/role": {
 			"post": {
 				"operationId": "authorizationAddRoleForSubject",
 				"summary": "Add a role for a subject",
@@ -680,6 +1018,17 @@
 					"Authorization"
 				],
 				"parameters": [
+					{
+						"name": "modelId",
+						"description": "The model identifier selecting which policy set to use.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "default"
+					},
 					{
 						"name": "subject",
 						"description": "The subject to add the role to.",
@@ -779,7 +1128,7 @@
 				}
 			}
 		},
-		"/authorization/subject/{subject}/role/{role}": {
+		"/authorization/{modelId}/subject/{subject}/role/{role}": {
 			"delete": {
 				"operationId": "authorizationRemoveRoleForSubject",
 				"summary": "Remove a role for a subject",
@@ -787,6 +1136,17 @@
 					"Authorization"
 				],
 				"parameters": [
+					{
+						"name": "modelId",
+						"description": "The model identifier selecting which policy set to use.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "default"
+					},
 					{
 						"name": "subject",
 						"description": "The subject to remove the role from.",
@@ -885,6 +1245,17 @@
 					"Authorization"
 				],
 				"parameters": [
+					{
+						"name": "modelId",
+						"description": "The model identifier selecting which policy set to use.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "default"
+					},
 					{
 						"name": "subject",
 						"description": "The subject to check.",
@@ -991,7 +1362,7 @@
 				}
 			}
 		},
-		"/authorization/subject/{subject}/roles": {
+		"/authorization/{modelId}/subject/{subject}/roles": {
 			"delete": {
 				"operationId": "authorizationRemoveAllRolesForSubject",
 				"summary": "Remove all roles for a subject",
@@ -999,6 +1370,17 @@
 					"Authorization"
 				],
 				"parameters": [
+					{
+						"name": "modelId",
+						"description": "The model identifier selecting which policy set to use.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "default"
+					},
 					{
 						"name": "subject",
 						"description": "The subject to remove all roles from.",
@@ -1086,6 +1468,17 @@
 					"Authorization"
 				],
 				"parameters": [
+					{
+						"name": "modelId",
+						"description": "The model identifier selecting which policy set to use.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "default"
+					},
 					{
 						"name": "subject",
 						"description": "The subject to get roles for.",
@@ -1184,7 +1577,7 @@
 				}
 			}
 		},
-		"/authorization/role/{role}/subjects": {
+		"/authorization/{modelId}/role/{role}/subjects": {
 			"get": {
 				"operationId": "authorizationGetSubjectsForRole",
 				"summary": "Get subjects for a role",
@@ -1192,6 +1585,17 @@
 					"Authorization"
 				],
 				"parameters": [
+					{
+						"name": "modelId",
+						"description": "The model identifier selecting which policy set to use.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "default"
+					},
 					{
 						"name": "role",
 						"description": "The role to get subjects for.",
@@ -1290,7 +1694,7 @@
 				}
 			}
 		},
-		"/authorization/role/{role}/inherit": {
+		"/authorization/{modelId}/role/{role}/inherit": {
 			"post": {
 				"operationId": "authorizationAddRoleInheritance",
 				"summary": "Add a role inheritance",
@@ -1298,6 +1702,17 @@
 					"Authorization"
 				],
 				"parameters": [
+					{
+						"name": "modelId",
+						"description": "The model identifier selecting which policy set to use.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "default"
+					},
 					{
 						"name": "role",
 						"description": "The role to add the inheritance to.",
@@ -1397,7 +1812,7 @@
 				}
 			}
 		},
-		"/authorization/role/{role}/inherit/{inheritsFrom}": {
+		"/authorization/{modelId}/role/{role}/inherit/{inheritsFrom}": {
 			"delete": {
 				"operationId": "authorizationRemoveRoleInheritance",
 				"summary": "Remove a role inheritance",
@@ -1405,6 +1820,17 @@
 					"Authorization"
 				],
 				"parameters": [
+					{
+						"name": "modelId",
+						"description": "The model identifier selecting which policy set to use.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "default"
+					},
 					{
 						"name": "role",
 						"description": "The role to remove the inheritance from.",
@@ -1497,7 +1923,7 @@
 				}
 			}
 		},
-		"/authorization/role/{role}/parents": {
+		"/authorization/{modelId}/role/{role}/parents": {
 			"get": {
 				"operationId": "authorizationGetParentRoles",
 				"summary": "Get parent roles for a role",
@@ -1505,6 +1931,17 @@
 					"Authorization"
 				],
 				"parameters": [
+					{
+						"name": "modelId",
+						"description": "The model identifier selecting which policy set to use.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "default"
+					},
 					{
 						"name": "role",
 						"description": "The role to get parent roles for.",
@@ -1602,7 +2039,7 @@
 				}
 			}
 		},
-		"/authorization/role/{role}/children": {
+		"/authorization/{modelId}/role/{role}/children": {
 			"get": {
 				"operationId": "authorizationGetChildRoles",
 				"summary": "Get child roles for a role",
@@ -1610,6 +2047,17 @@
 					"Authorization"
 				],
 				"parameters": [
+					{
+						"name": "modelId",
+						"description": "The model identifier selecting which policy set to use.",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"style": "simple",
+						"example": "default"
+					},
 					{
 						"name": "role",
 						"description": "The role to get child roles for.",
@@ -1848,16 +2296,20 @@
 			"AuthorizationGetPoliciesForSubjectResponse": {
 				"type": "object",
 				"properties": {
-					"policies": {
+					"entities": {
 						"type": "array",
 						"items": {
 							"$ref": "#/components/schemas/AuthorizationPolicy"
 						},
 						"description": "The list of policies for the subject."
+					},
+					"cursor": {
+						"type": "string",
+						"description": "An optional cursor for the next page of results."
 					}
 				},
 				"required": [
-					"policies"
+					"entities"
 				],
 				"description": "The response body."
 			},
@@ -1905,6 +2357,76 @@
 					"hasRole"
 				],
 				"description": "The response body."
+			},
+			"AuthorizationHasRolesRequest": {
+				"type": "object",
+				"properties": {
+					"roles": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "The role names to check."
+					}
+				},
+				"required": [
+					"roles"
+				],
+				"description": "The request data."
+			},
+			"AuthorizationHasRolesResponse": {
+				"type": "object",
+				"properties": {
+					"exists": {
+						"type": "array",
+						"items": {
+							"type": "boolean"
+						},
+						"description": "Whether each role exists, in the same order as the request."
+					}
+				},
+				"required": [
+					"exists"
+				],
+				"description": "The response body."
+			},
+			"AuthorizationInheritance": {
+				"description": "Defines a single role inheritance relationship.",
+				"type": "object",
+				"properties": {
+					"role": {
+						"type": "string",
+						"description": "The role."
+					},
+					"inheritsFrom": {
+						"type": "string",
+						"description": "The role that this role inherits from."
+					}
+				},
+				"required": [
+					"role",
+					"inheritsFrom"
+				]
+			},
+			"AuthorizationModel": {
+				"description": "Defines a set of authorization rules as a model.",
+				"type": "object",
+				"properties": {
+					"policies": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/AuthorizationPolicy"
+						},
+						"description": "Direct policy rules to apply."
+					},
+					"roleInheritances": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/AuthorizationInheritance"
+						},
+						"description": "Role inheritance relationships between roles."
+					}
+				}
 			},
 			"AuthorizationPolicy": {
 				"description": "Defines a single authorization policy rule binding a subject, object, and action.",

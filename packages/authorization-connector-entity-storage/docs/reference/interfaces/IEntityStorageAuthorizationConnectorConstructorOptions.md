@@ -4,14 +4,6 @@ Options for the entity storage authorization connector constructor.
 
 ## Properties
 
-### loggingComponentType? {#loggingcomponenttype}
-
-> `optional` **loggingComponentType?**: `string`
-
-The component type for the optional logging.
-
-***
-
 ### authorizationPolicyEntityStorageType? {#authorizationpolicyentitystoragetype}
 
 > `optional` **authorizationPolicyEntityStorageType?**: `string`
@@ -26,16 +18,16 @@ The entity storage type for authorization policies.
 
 ***
 
-### authorizationRoleEntityStorageType? {#authorizationroleentitystoragetype}
+### authorizationRoleAssignmentEntityStorageType? {#authorizationroleassignmententitystoragetype}
 
-> `optional` **authorizationRoleEntityStorageType?**: `string`
+> `optional` **authorizationRoleAssignmentEntityStorageType?**: `string`
 
 The entity storage type for authorization role assignments.
 
 #### Default
 
 ```ts
-"authorization-role"
+"authorization-role-assignment"
 ```
 
 ***
@@ -54,8 +46,14 @@ The entity storage type for authorization role inheritance relationships.
 
 ***
 
-### config? {#config}
+### authorizationRoleNameEntityStorageType? {#authorizationrolenameentitystoragetype}
 
-> `optional` **config?**: [`IEntityStorageAuthorizationConnectorConfig`](IEntityStorageAuthorizationConnectorConfig.md)
+> `optional` **authorizationRoleNameEntityStorageType?**: `string`
 
-The configuration for the service.
+The entity storage type for the denormalised role name index.
+
+#### Default
+
+```ts
+"authorization-role-name"
+```
