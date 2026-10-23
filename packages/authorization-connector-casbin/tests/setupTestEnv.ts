@@ -1,4 +1,5 @@
 // Copyright 2026 IOTA Stiftung.
+// Copyright 2026 3Sixty Trade Ltd.
 // SPDX-License-Identifier: Apache-2.0.
 import { execSync } from "node:child_process";
 import { existsSync, unlinkSync } from "node:fs";
@@ -30,8 +31,21 @@ export const TEST_CASBIN_ENDPOINT = process.env.TEST_CASBIN_ENDPOINT;
  */
 function readCredentialsFromContainer(): { clientId: string; clientSecret: string } {
 	const tmpDb = path.join(tmpdir(), `casdoor-${process.pid}.db`);
+	// Newer images use WAL mode, so copy the -wal and -shm files alongside the database when present
+	const dbFiles = execSync(`docker exec ${TEST_CONTAINER_NAME} sh -c "ls ${DB_CONTAINER_PATH}*"`, {
+		stdio: "pipe"
+	})
+		.toString()
+		.split("\n")
+		.map(f => f.trim())
+		.filter(f => f.length > 0);
+	const tmpFiles = dbFiles.map(f => `${tmpDb}${f.slice(DB_CONTAINER_PATH.length)}`);
 	try {
-		execSync(`docker cp ${TEST_CONTAINER_NAME}:${DB_CONTAINER_PATH} "${tmpDb}"`, { stdio: "pipe" });
+		for (let i = 0; i < dbFiles.length; i++) {
+			execSync(`docker cp ${TEST_CONTAINER_NAME}:${dbFiles[i]} "${tmpFiles[i]}"`, {
+				stdio: "pipe"
+			});
+		}
 		const db = new DatabaseSync(tmpDb);
 		const row = db
 			.prepare("SELECT client_id, client_secret FROM application WHERE name = 'app-built-in'")
@@ -42,8 +56,10 @@ function readCredentialsFromContainer(): { clientId: string; clientSecret: strin
 		}
 		return { clientId: row.client_id, clientSecret: row.client_secret };
 	} finally {
-		if (existsSync(tmpDb)) {
-			unlinkSync(tmpDb);
+		for (const tmpFile of tmpFiles) {
+			if (existsSync(tmpFile)) {
+				unlinkSync(tmpFile);
+			}
 		}
 	}
 }
