@@ -1,4 +1,5 @@
 // Copyright 2026 IOTA Stiftung.
+// Copyright 2026 3Sixty Trade Ltd.
 // SPDX-License-Identifier: Apache-2.0.
 import type {
 	IAuthorizationConnector,
@@ -622,26 +623,22 @@ export class CasbinAuthorizationConnector implements IAuthorizationConnector {
 				return;
 			}
 			const rules = await this.getRules(tenantId, modelId, "g", 0, [subject]);
-			// Casdoor has no batch or filtered remove endpoint, so the removals are sent concurrently.
-			await Promise.all(
-				rules
-					.filter(r => this.isAssignment(r) && r.V0 === subject)
-					.map(async r =>
-						this.postRule(
-							tenantId,
-							modelId,
-							"remove-policy",
-							{
-								ptype: "g",
-								v0: subject,
-								v1: r.V1,
-								v2: CasbinAuthorizationConnector._ASSIGNMENT_MARKER
-							},
-							"removeAllRolesForSubjectFailed",
-							{ subject }
-						)
-					)
-			);
+			// Casdoor has no batch remove endpoint and stalls on concurrent writes, so remove sequentially.
+			for (const r of rules.filter(rule => this.isAssignment(rule) && rule.V0 === subject)) {
+				await this.postRule(
+					tenantId,
+					modelId,
+					"remove-policy",
+					{
+						ptype: "g",
+						v0: subject,
+						v1: r.V1,
+						v2: CasbinAuthorizationConnector._ASSIGNMENT_MARKER
+					},
+					"removeAllRolesForSubjectFailed",
+					{ subject }
+				);
+			}
 		} catch (err) {
 			if (BaseError.isErrorName(err, GeneralError.CLASS_NAME)) {
 				throw err;
