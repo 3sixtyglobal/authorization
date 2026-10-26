@@ -242,7 +242,7 @@ importers:
   packages/authorization-connector-casbin:
     dependencies:
       '@3sixty/authorization-models':
-        specifier: 0.20.0-next.1
+        specifier: 0.20.0-next.2
         version: link:../authorization-models
       '@3sixty/context':
         specifier: next
@@ -306,7 +306,7 @@ importers:
   packages/authorization-connector-entity-storage:
     dependencies:
       '@3sixty/authorization-models':
-        specifier: 0.20.0-next.1
+        specifier: 0.20.0-next.2
         version: link:../authorization-models
       '@3sixty/core':
         specifier: next
@@ -425,7 +425,7 @@ importers:
         specifier: next
         version: 0.20.0-next.2
       '@3sixty/authorization-models':
-        specifier: 0.20.0-next.1
+        specifier: 0.20.0-next.2
         version: link:../authorization-models
       '@3sixty/core':
         specifier: next
@@ -480,7 +480,7 @@ importers:
         specifier: next
         version: 0.20.0-next.2
       '@3sixty/authorization-models':
-        specifier: 0.20.0-next.1
+        specifier: 0.20.0-next.2
         version: link:../authorization-models
       '@3sixty/context':
         specifier: next
@@ -502,7 +502,7 @@ importers:
         version: 0.20.0-next.4
     devDependencies:
       '@3sixty/authorization-connector-entity-storage':
-        specifier: 0.20.0-next.1
+        specifier: 0.20.0-next.2
         version: link:../authorization-connector-entity-storage
       '@3sixty/entity-storage-connector-memory':
         specifier: next
