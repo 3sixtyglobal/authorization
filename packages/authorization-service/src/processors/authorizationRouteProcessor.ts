@@ -1,4 +1,5 @@
 // Copyright 2024 IOTA Stiftung.
+// Copyright 2026 3Sixty Trade Ltd.
 // SPDX-License-Identifier: Apache-2.0.
 import {
 	ForbiddenError,
@@ -16,7 +17,7 @@ import { HttpStatusCode } from "@3sixty/web";
 import type { IAuthorizationRouteProcessorConstructorOptions } from "../models/IAuthorizationRouteProcessorConstructorOptions.js";
 
 /**
- * Use the identity from the context ids to check their authorization for a route.
+ * Use the signed in account from the context ids to check its authorization for a route.
  */
 export class AuthorizationRouteProcessor implements IBaseRouteProcessor {
 	/**
@@ -97,14 +98,14 @@ export class AuthorizationRouteProcessor implements IBaseRouteProcessor {
 					throw new GeneralError(AuthorizationRouteProcessor.CLASS_NAME, "routeIdMissing");
 				}
 
-				const userId = contextIds[ContextIdKeys.User];
-				if (!Is.stringValue(userId)) {
+				const accountId = contextIds[ContextIdKeys.Account];
+				if (!Is.stringValue(accountId)) {
 					throw new UnauthorizedError(AuthorizationRouteProcessor.CLASS_NAME, "accessDenied");
 				}
 				if (
 					!(await this._authorizationComponent.check(
 						this._authorizationModelId,
-						userId,
+						accountId,
 						routeId,
 						"execute"
 					))

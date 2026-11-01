@@ -91,3 +91,16 @@ await service.removeRoleForSubject('bob', 'editor');
 await service.removeAllRolesForSubject('bob');
 await service.removePolicy({ subject: 'viewer', object: 'dashboard', action: 'export' });
 ```
+
+## AuthorizationRouteProcessor
+
+The route processor checks the signed in account, the account id from the request context, against the `execute` policy for the route operation id. Roles are therefore assigned to account ids rather than DIDs.
+
+```typescript
+import { AuthorizationRouteProcessor } from '@3sixty/authorization-service';
+
+const processor = new AuthorizationRouteProcessor({ config: { authorizationModelId: 'system' } });
+
+// Give the account 01a17afb-e05f-7939-83f2-d4f04c4bdf2e the user role.
+await service.addRoleForSubject('01a17afb-e05f-7939-83f2-d4f04c4bdf2e', 'user');
+```
