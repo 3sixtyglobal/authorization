@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.20.0-next.3](https://github.com/3sixtyglobal/authorization/compare/authorization-connector-casbin-v0.20.0-next.2...authorization-connector-casbin-v0.20.0-next.3) (2026-11-02)
+
+
+### Miscellaneous Chores
+
+* **authorization-connector-casbin:** Synchronize repo versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @3sixty/authorization-models bumped from 0.20.0-next.2 to 0.20.0-next.3
+
 ## [0.20.0-next.2](https://github.com/3sixtyglobal/authorization/compare/authorization-connector-casbin-v0.20.0-next.1...authorization-connector-casbin-v0.20.0-next.2) (2026-10-26)
 
 
