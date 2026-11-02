@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.20.0-next.3](https://github.com/3sixtyglobal/authorization/compare/authorization-service-v0.20.0-next.2...authorization-service-v0.20.0-next.3) (2026-11-02)
+
+
+### Features
+
+* assign authorization roles to account ids ([#11](https://github.com/3sixtyglobal/authorization/issues/11)) ([ba85fc6](https://github.com/3sixtyglobal/authorization/commit/ba85fc67f53fc5fc56bb2473cce3725c97648b38))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @3sixty/authorization-models bumped from 0.20.0-next.2 to 0.20.0-next.3
+  * devDependencies
+    * @3sixty/authorization-connector-entity-storage bumped from 0.20.0-next.2 to 0.20.0-next.3
+
 ## [0.20.0-next.2](https://github.com/3sixtyglobal/authorization/compare/authorization-service-v0.20.0-next.1...authorization-service-v0.20.0-next.2) (2026-10-26)
 
 

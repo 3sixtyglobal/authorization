@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.20.0-next.3](https://github.com/3sixtyglobal/authorization/compare/authorization-models-v0.20.0-next.2...authorization-models-v0.20.0-next.3) (2026-11-02)
+
+
+### Miscellaneous Chores
+
+* **authorization-models:** Synchronize repo versions
+
 ## [0.20.0-next.2](https://github.com/3sixtyglobal/authorization/compare/authorization-models-v0.20.0-next.1...authorization-models-v0.20.0-next.2) (2026-10-26)
 
 
