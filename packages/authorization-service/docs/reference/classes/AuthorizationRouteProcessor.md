@@ -1,6 +1,6 @@
 # Class: AuthorizationRouteProcessor
 
-Use the identity from the context ids to check their authorization for a route.
+Use the signed in account from the context ids to check its authorization for a route.
 
 ## Implements
 
