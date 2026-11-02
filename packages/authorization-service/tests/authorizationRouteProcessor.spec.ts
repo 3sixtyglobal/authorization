@@ -1,4 +1,5 @@
 // Copyright 2026 IOTA Stiftung.
+// Copyright 2026 3Sixty Trade Ltd.
 // SPDX-License-Identifier: Apache-2.0.
 import type { IBaseRoute, IHttpResponse, IHttpServerRequest } from "@3sixty/api-models";
 import {
@@ -112,7 +113,7 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 	}
 
 	function makeContextIds(userId?: string): IContextIds {
-		return userId !== undefined ? { [ContextIdKeys.User]: userId } : {};
+		return userId !== undefined ? { [ContextIdKeys.Account]: userId } : {};
 	}
 
 	async function initialize(rules: IAuthorizationModel): Promise<void> {
@@ -157,6 +158,32 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 			);
 
 			expect(response.statusCode).toBe(HttpStatusCode.forbidden);
+		});
+
+		test("checks the account id, not the DID of the account", async () => {
+			await initialize({
+				policies: [{ subject: "did:example:alice", object: "documentUpdate", action: "execute" }]
+			});
+
+			const didOnly = makeResponse();
+			await processor.pre(
+				makeRequest(),
+				didOnly,
+				makeRoute("documentUpdate"),
+				{ [ContextIdKeys.User]: "did:example:alice" },
+				{}
+			);
+			expect(didOnly.statusCode).toBe(HttpStatusCode.unauthorized);
+
+			const withAccount = makeResponse();
+			await processor.pre(
+				makeRequest(),
+				withAccount,
+				makeRoute("documentUpdate"),
+				{ [ContextIdKeys.Account]: "account-1", [ContextIdKeys.User]: "did:example:alice" },
+				{}
+			);
+			expect(withAccount.statusCode).toBe(HttpStatusCode.forbidden);
 		});
 	});
 
@@ -461,7 +488,7 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 		test("allows caller to grant a role they directly hold", async () => {
 			await service.addRoleForSubject(MODEL_ID, "user-admin", "editor");
 
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					authorizationAddRoleForSubject(HTTP_CTX, COMPONENT_TYPE, {
 						pathParams: { modelId: MODEL_ID, subject: "user-bob" },
@@ -475,7 +502,7 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 			await service.addRoleInheritance(MODEL_ID, "super-admin", "tenant-admin");
 			await service.addRoleForSubject(MODEL_ID, "user-admin", "tenant-admin");
 
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					authorizationAddRoleForSubject(HTTP_CTX, COMPONENT_TYPE, {
 						pathParams: { modelId: MODEL_ID, subject: "user-bob" },
@@ -488,7 +515,7 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 		test("allows caller to grant a role they do not directly hold", async () => {
 			await service.addRoleForSubject(MODEL_ID, "user-admin", "editor");
 
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					authorizationAddRoleForSubject(HTTP_CTX, COMPONENT_TYPE, {
 						pathParams: { modelId: MODEL_ID, subject: "user-bob" },
@@ -502,7 +529,7 @@ describe("AuthorizationRouteProcessor (entity-storage backed)", () => {
 			await service.addRoleInheritance(MODEL_ID, "super-editor", "editor");
 			await service.addRoleForSubject(MODEL_ID, "user-admin", "editor");
 
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					authorizationAddRoleForSubject(HTTP_CTX, COMPONENT_TYPE, {
 						pathParams: { modelId: MODEL_ID, subject: "user-bob" },

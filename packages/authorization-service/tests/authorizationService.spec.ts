@@ -1,4 +1,5 @@
 // Copyright 2026 IOTA Stiftung.
+// Copyright 2026 3Sixty Trade Ltd.
 // SPDX-License-Identifier: Apache-2.0.
 import {
 	type AuthorizationPolicy,
@@ -79,6 +80,10 @@ describe("AuthorizationService", () => {
 	test("Can create an instance", async () => {
 		const service = new AuthorizationService();
 		expect(service).toBeDefined();
+	});
+
+	test("Fails to create an instance when the default namespace has no connector", async () => {
+		expect(() => new AuthorizationService({ config: { defaultNamespace: "missing" } })).toThrow();
 	});
 
 	describe("check cache", () => {
@@ -558,7 +563,7 @@ describe("AuthorizationService", () => {
 		test("allows caller to grant a role they directly hold", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.addRoleForSubject(TEST_MODEL_ID, "user-bob", "editor")
 				).resolves.toBeUndefined();
@@ -568,7 +573,7 @@ describe("AuthorizationService", () => {
 		test("allows caller to grant a role they do not hold", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.addRoleForSubject(TEST_MODEL_ID, "user-bob", "devops")
 				).resolves.toBeUndefined();
@@ -579,7 +584,7 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			await connector.addRoleInheritance(TEST_MODEL_ID, "super-editor", "editor");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.addRoleForSubject(TEST_MODEL_ID, "user-bob", "super-editor")
 				).rejects.toThrow();
@@ -591,7 +596,7 @@ describe("AuthorizationService", () => {
 			await connector.addRoleInheritance(TEST_MODEL_ID, "senior-editor", "editor");
 			await connector.addRoleInheritance(TEST_MODEL_ID, "super-editor", "senior-editor");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.addRoleForSubject(TEST_MODEL_ID, "user-bob", "super-editor")
 				).rejects.toThrow();
@@ -603,7 +608,7 @@ describe("AuthorizationService", () => {
 			await connector.addRoleInheritance(TEST_MODEL_ID, "senior-editor", "editor");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "auditor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.addRoleForSubject(TEST_MODEL_ID, "user-bob", "devops")
 				).resolves.toBeUndefined();
@@ -625,7 +630,7 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			await connector.addRoleInheritance(TEST_MODEL_ID, "super-editor", "editor");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.addRoleInheritance(TEST_MODEL_ID, "editor", "super-editor")
 				).rejects.toThrow();
@@ -636,7 +641,7 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			await connector.addRoleInheritance(TEST_MODEL_ID, "super-editor", "editor");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.addRoleInheritance(TEST_MODEL_ID, "super-editor", "viewer")
 				).rejects.toThrow();
@@ -647,7 +652,7 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			await connector.addRoleInheritance(TEST_MODEL_ID, "super-editor", "editor");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.addRoleInheritance(TEST_MODEL_ID, "viewer", "reader")
 				).resolves.toBeUndefined();
@@ -668,7 +673,7 @@ describe("AuthorizationService", () => {
 		test("denies adding a policy for the caller's own user id", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.addPolicy(TEST_MODEL_ID, "user-admin", "resource", "write")
 				).rejects.toThrow();
@@ -678,7 +683,7 @@ describe("AuthorizationService", () => {
 		test("denies adding a policy for a role the caller directly holds", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.addPolicy(TEST_MODEL_ID, "editor", "resource", "write")
 				).rejects.toThrow();
@@ -689,7 +694,7 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.addPolicy(TEST_MODEL_ID, "viewer", "resource", "write")
 				).rejects.toThrow();
@@ -699,7 +704,7 @@ describe("AuthorizationService", () => {
 		test("allows adding a policy for an unrelated role", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.addPolicy(TEST_MODEL_ID, "devops", "resource", "read")
 				).resolves.toBeUndefined();
@@ -723,7 +728,7 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({
 				config: { defaultNamespace: TEST_NAMESPACE, authorizationModelId: TEST_MODEL_ID }
 			});
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.build(TEST_MODEL_ID, { policies: [], roleInheritances: [] })
 				).rejects.toThrow();
@@ -745,7 +750,7 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({
 				config: { defaultNamespace: TEST_NAMESPACE, authorizationModelId: "system" }
 			});
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await service.build(TEST_MODEL_ID, {
 					policies: [{ subject: "user-admin", object: "reports", action: "read" }],
 					roleInheritances: []
@@ -763,7 +768,7 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({
 				config: { defaultNamespace: TEST_NAMESPACE, authorizationModelId: "system" }
 			});
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await service.build(TEST_MODEL_ID, {
 					policies: [{ subject: "user-admin", object: "authorization", action: "build" }],
 					roleInheritances: []
@@ -780,7 +785,7 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({
 				config: { defaultNamespace: TEST_NAMESPACE, authorizationModelId: "system" }
 			});
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await service.build(TEST_MODEL_ID, { policies: [], roleInheritances: [] });
 				await expect(
 					service.build(TEST_MODEL_ID, { policies: [], roleInheritances: [] })
@@ -793,7 +798,7 @@ describe("AuthorizationService", () => {
 				config: { defaultNamespace: TEST_NAMESPACE, authorizationModelId: "system" }
 			});
 			await connector.addPolicy(TEST_MODEL_ID, "user-owner", "authorization", "build");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-other" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-other" }, async () => {
 				await expect(
 					service.build(TEST_MODEL_ID, { policies: [], roleInheritances: [] })
 				).rejects.toThrow();
@@ -813,7 +818,7 @@ describe("AuthorizationService", () => {
 
 		test("allows first build with userId and injects build policy for the caller", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await service.build(TEST_MODEL_ID, {
 					policies: [{ subject: "reader", object: "reports", action: "read" }],
 					roleInheritances: []
@@ -829,7 +834,7 @@ describe("AuthorizationService", () => {
 
 		test("allows second build with userId when caller has the injected build policy", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await service.build(TEST_MODEL_ID, { policies: [], roleInheritances: [] });
 				await expect(
 					service.build(TEST_MODEL_ID, { policies: [], roleInheritances: [] })
@@ -839,10 +844,10 @@ describe("AuthorizationService", () => {
 
 		test("denies second build with a different userId that has no build policy", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-owner" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-owner" }, async () => {
 				await service.build(TEST_MODEL_ID, { policies: [], roleInheritances: [] });
 			});
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-other" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-other" }, async () => {
 				await expect(
 					service.build(TEST_MODEL_ID, { policies: [], roleInheritances: [] })
 				).rejects.toThrow();
@@ -856,7 +861,7 @@ describe("AuthorizationService", () => {
 			await connector.addRoleInheritance(TEST_MODEL_ID, "super-editor", "editor");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-bob", "viewer");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.removeRoleForSubject(TEST_MODEL_ID, "user-bob", "viewer")
 				).resolves.toBeUndefined();
@@ -868,7 +873,7 @@ describe("AuthorizationService", () => {
 			await connector.addRoleInheritance(TEST_MODEL_ID, "super-editor", "editor");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "super-user", "super-editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.removeRoleForSubject(TEST_MODEL_ID, "super-user", "super-editor")
 				).rejects.toThrow();
@@ -884,7 +889,7 @@ describe("AuthorizationService", () => {
 				"user-global-admin",
 				AuthorizationService.DEFAULT_ESCALATED_PRIVILEGE_ROLE
 			);
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.removeAllRolesForSubject(TEST_MODEL_ID, "user-global-admin")
 				).rejects.toThrow();
@@ -895,7 +900,7 @@ describe("AuthorizationService", () => {
 	describe("escalated privilege role assignment guard", () => {
 		test("denies a role-less caller granting the escalated privilege role", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-proxy" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-proxy" }, async () => {
 				await expect(
 					service.addRoleForSubject(
 						TEST_MODEL_ID,
@@ -913,7 +918,7 @@ describe("AuthorizationService", () => {
 			await connector.addRoleInheritance(TEST_MODEL_ID, "super-editor", "editor");
 			await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.removeRoleInheritance(TEST_MODEL_ID, "editor", "viewer")
 				).resolves.toBeUndefined();
@@ -924,7 +929,7 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			await connector.addRoleInheritance(TEST_MODEL_ID, "super-editor", "editor");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.removeRoleInheritance(TEST_MODEL_ID, "super-editor", "editor")
 				).rejects.toThrow();
@@ -945,7 +950,7 @@ describe("AuthorizationService", () => {
 			const service = await makePrivilegedService();
 			await connector.addRoleInheritance(TEST_MODEL_ID, "super-editor", "editor");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-priv", "editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-priv" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-priv" }, async () => {
 				await expect(
 					service.addRoleForSubject(TEST_MODEL_ID, "user-bob", "super-editor")
 				).resolves.toBeUndefined();
@@ -956,7 +961,7 @@ describe("AuthorizationService", () => {
 			const service = await makePrivilegedService();
 			await connector.addRoleInheritance(TEST_MODEL_ID, "super-editor", "editor");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-priv", "editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-priv" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-priv" }, async () => {
 				await expect(
 					service.addRoleInheritance(TEST_MODEL_ID, "super-editor", "admin")
 				).resolves.toBeUndefined();
@@ -965,7 +970,7 @@ describe("AuthorizationService", () => {
 
 		test("holder can add a policy for their own user ID", async () => {
 			const service = await makePrivilegedService();
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-priv" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-priv" }, async () => {
 				await expect(
 					service.addPolicy(TEST_MODEL_ID, "user-priv", "resource", "write")
 				).resolves.toBeUndefined();
@@ -974,7 +979,7 @@ describe("AuthorizationService", () => {
 
 		test("holder can add a policy for a role they hold", async () => {
 			const service = await makePrivilegedService();
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-priv" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-priv" }, async () => {
 				await expect(
 					service.addPolicy(TEST_MODEL_ID, PRIV_ROLE, "resource", "write")
 				).resolves.toBeUndefined();
@@ -986,7 +991,7 @@ describe("AuthorizationService", () => {
 			await connector.addRoleInheritance(TEST_MODEL_ID, "super-editor", "editor");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-priv", "editor");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-bob", "super-editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-priv" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-priv" }, async () => {
 				await expect(
 					service.removeRoleForSubject(TEST_MODEL_ID, "user-bob", "super-editor")
 				).resolves.toBeUndefined();
@@ -997,7 +1002,7 @@ describe("AuthorizationService", () => {
 			const service = await makePrivilegedService();
 			await connector.addRoleInheritance(TEST_MODEL_ID, "super-editor", "editor");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-priv", "editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-priv" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-priv" }, async () => {
 				await expect(
 					service.removeRoleInheritance(TEST_MODEL_ID, "super-editor", "editor")
 				).resolves.toBeUndefined();
@@ -1012,7 +1017,7 @@ describe("AuthorizationService", () => {
 				}
 			});
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-priv", PRIV_ROLE);
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-priv" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-priv" }, async () => {
 				await expect(
 					service.build(TEST_MODEL_ID, { policies: [], roleInheritances: [] })
 				).resolves.toBeUndefined();
@@ -1025,7 +1030,7 @@ describe("AuthorizationService", () => {
 			});
 			await connector.addPolicy(TEST_MODEL_ID, "user-owner", "authorization", "build");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-priv", PRIV_ROLE);
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-priv" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-priv" }, async () => {
 				await expect(
 					service.build(TEST_MODEL_ID, { policies: [], roleInheritances: [] })
 				).resolves.toBeUndefined();
@@ -1041,7 +1046,7 @@ describe("AuthorizationService", () => {
 			});
 			await connector.addRoleInheritance(TEST_MODEL_ID, "super-editor", "editor");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.addRoleForSubject(TEST_MODEL_ID, "user-bob", "super-editor")
 				).rejects.toThrow();
@@ -1050,7 +1055,7 @@ describe("AuthorizationService", () => {
 
 		test("holder can assign a role to themselves", async () => {
 			const service = await makePrivilegedService();
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-priv" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-priv" }, async () => {
 				await expect(
 					service.addRoleForSubject(TEST_MODEL_ID, "user-priv", "devops")
 				).resolves.toBeUndefined();
@@ -1060,7 +1065,7 @@ describe("AuthorizationService", () => {
 		test("holder can remove a policy from the escalated privilege role", async () => {
 			const service = await makePrivilegedService();
 			await connector.addPolicy(TEST_MODEL_ID, PRIV_ROLE, "resource", "write");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-priv" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-priv" }, async () => {
 				await expect(
 					service.removePolicy(TEST_MODEL_ID, PRIV_ROLE, "resource", "write")
 				).resolves.toBeUndefined();
@@ -1072,7 +1077,7 @@ describe("AuthorizationService", () => {
 		test("denies a caller assigning a role to themselves", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.addRoleForSubject(TEST_MODEL_ID, "user-admin", "devops")
 				).rejects.toThrow("escalationDenied");
@@ -1082,7 +1087,7 @@ describe("AuthorizationService", () => {
 		test("denies granting a new role a policy and then assigning it to the caller", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await service.addPolicy(TEST_MODEL_ID, "new-role", "anything", "execute");
 				await expect(
 					service.addRoleForSubject(TEST_MODEL_ID, "user-admin", "new-role")
@@ -1094,7 +1099,7 @@ describe("AuthorizationService", () => {
 		test("denies making the caller's own role inherit from an unrelated role", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "user-admin-role");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.addRoleInheritance(TEST_MODEL_ID, "user-admin-role", "ops-admin")
 				).rejects.toThrow("escalationDenied");
@@ -1105,7 +1110,7 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			await connector.addRoleInheritance(TEST_MODEL_ID, "editor", "viewer");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.addRoleInheritance(TEST_MODEL_ID, "viewer", "ops-admin")
 				).rejects.toThrow("escalationDenied");
@@ -1115,7 +1120,7 @@ describe("AuthorizationService", () => {
 		test("allows a caller to remove their own role", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.removeRoleForSubject(TEST_MODEL_ID, "user-admin", "editor")
 				).resolves.toBeUndefined();
@@ -1130,7 +1135,7 @@ describe("AuthorizationService", () => {
 				AuthorizationService.DEFAULT_ESCALATED_PRIVILEGE_ROLE
 			);
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-global-admin", "viewer");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.removeRoleForSubject(TEST_MODEL_ID, "user-global-admin", "viewer")
 				).rejects.toThrow("escalationDenied");
@@ -1153,7 +1158,7 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
 			await connector.addPolicy(TEST_MODEL_ID, "devops", "resource", "read");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.removePolicy(TEST_MODEL_ID, "devops", "resource", "read")
 				).resolves.toBeUndefined();
@@ -1164,7 +1169,7 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			const privRole = AuthorizationService.DEFAULT_ESCALATED_PRIVILEGE_ROLE;
 			await connector.addPolicy(TEST_MODEL_ID, privRole, "resource", "write");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.removePolicy(TEST_MODEL_ID, privRole, "resource", "write")
 				).rejects.toThrow("escalationDenied");
@@ -1176,7 +1181,7 @@ describe("AuthorizationService", () => {
 			await connector.addRoleInheritance(TEST_MODEL_ID, "super-editor", "editor");
 			await connector.addRoleForSubject(TEST_MODEL_ID, "user-admin", "editor");
 			await connector.addPolicy(TEST_MODEL_ID, "super-editor", "resource", "write");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.removePolicy(TEST_MODEL_ID, "super-editor", "resource", "write")
 				).rejects.toThrow("escalationDenied");
@@ -1191,7 +1196,7 @@ describe("AuthorizationService", () => {
 				AuthorizationService.DEFAULT_ESCALATED_PRIVILEGE_ROLE
 			);
 			await connector.addPolicy(TEST_MODEL_ID, "user-global-admin", "resource", "write");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-admin" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-admin" }, async () => {
 				await expect(
 					service.removePolicy(TEST_MODEL_ID, "user-global-admin", "resource", "write")
 				).rejects.toThrow("escalationDenied");
@@ -1201,7 +1206,7 @@ describe("AuthorizationService", () => {
 		test("denies removing another owner's build policy when the caller cannot build", async () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			await connector.addPolicy(TEST_MODEL_ID, "user-owner", "authorization", "build");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-other" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-other" }, async () => {
 				await expect(
 					service.removePolicy(TEST_MODEL_ID, "user-owner", "authorization", "build")
 				).rejects.toThrow("escalationDenied");
@@ -1212,7 +1217,7 @@ describe("AuthorizationService", () => {
 			const service = new AuthorizationService({ config: { defaultNamespace: TEST_NAMESPACE } });
 			await connector.addPolicy(TEST_MODEL_ID, "user-owner", "authorization", "build");
 			await connector.addPolicy(TEST_MODEL_ID, "user-other", "authorization", "build");
-			await ContextIdStore.run({ [ContextIdKeys.User]: "user-owner" }, async () => {
+			await ContextIdStore.run({ [ContextIdKeys.Account]: "user-owner" }, async () => {
 				await expect(
 					service.removePolicy(TEST_MODEL_ID, "user-other", "authorization", "build")
 				).resolves.toBeUndefined();
