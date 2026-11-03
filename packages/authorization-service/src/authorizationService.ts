@@ -13,6 +13,7 @@ import {
 import { ContextIdKeys, ContextIdStore } from "@3sixty/context";
 import {
 	ComponentFactory,
+	DurationConstants,
 	GeneralError,
 	GuardError,
 	Guards,
@@ -123,7 +124,7 @@ export class AuthorizationService implements IAuthorizationComponent {
 
 		this._checkCacheConfig = {
 			capacity: options?.config?.checkCacheCapacity,
-			ttiMs: options?.config?.checkCacheTtiMs ?? 60000
+			ttiMs: options?.config?.checkCacheTtiMs ?? DurationConstants.MsPerMinute
 		};
 		this._checkCache = new Map<string, Map<string, LfuCache<boolean>>>();
 		this._cacheGeneration = 0;
