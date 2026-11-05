@@ -22,3 +22,4 @@ vitest.config.ts.timestamp*
 **/Move.toml.copy
 **/.coverage/
 **/.trace/
+.claude/settings.local.json

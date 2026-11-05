@@ -6,6 +6,5 @@ import type { IAuthorizationConnector } from "../models/IAuthorizationConnector.
 /**
  * Factory for creating authorization connectors.
  */
-// eslint-disable-next-line @typescript-eslint/naming-convention
 export const AuthorizationConnectorFactory =
 	Factory.createFactory<IAuthorizationConnector>("authorization-connector");
